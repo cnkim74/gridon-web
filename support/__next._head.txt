@@ -1,0 +1,6 @@
+1:"$Sreact.fragment"
+2:I[97367,["/gridon-web/_next/static/chunks/2b4zi-a_zm296.js","/gridon-web/_next/static/chunks/14mrh2-p_w84d.js"],"ViewportBoundary"]
+3:I[97367,["/gridon-web/_next/static/chunks/2b4zi-a_zm296.js","/gridon-web/_next/static/chunks/14mrh2-p_w84d.js"],"MetadataBoundary"]
+4:"$Sreact.suspense"
+5:I[27201,["/gridon-web/_next/static/chunks/2b4zi-a_zm296.js","/gridon-web/_next/static/chunks/14mrh2-p_w84d.js"],"IconMark"]
+0:{"rsc":["$","$1","h",{"children":[null,["$","$L2",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","div",null,{"hidden":true,"children":["$","$L3",null,{"children":["$","$4",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"고객지원 · GRIDON 그리드온"}],["$","meta","1",{"name":"description","content":"전력망이 깨어나는 그 순간. 그리드온은 전력공급·스마트그리드·신재생/ESS·전기공사를 아우르는 종합 전력회사입니다."}],["$","link","2",{"rel":"icon","href":"/gridon-web/icon.svg?icon.1kd4e2y96pb9k.svg","sizes":"any","type":"image/svg+xml"}],["$","$L5","3",{}]]}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"VAiUwE-eH6XpZqBuduV7H"}
