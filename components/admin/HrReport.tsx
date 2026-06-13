@@ -67,7 +67,12 @@ export default function HrReport() {
     URL.revokeObjectURL(url);
   }
 
-  const printCss = `@media print {
+  const printCss = `
+  .ins-badges { display: flex; flex-wrap: nowrap; gap: 6px; align-items: center; }
+  @media (max-width: 640px) {
+    .ins-badges { display: grid; grid-template-columns: repeat(2, auto); gap: 3px 8px; }
+  }
+  @media print {
     body * { visibility: hidden !important; }
     #hr-report, #hr-report * { visibility: visible !important; }
     #hr-report { position: absolute; left: 0; top: 0; width: 100%; padding: 8mm; }
@@ -131,7 +136,7 @@ export default function HrReport() {
                 <td className="strong"><Link href={`/admin/employee/?id=${e.id}`} style={{ color: "var(--ink)" }}>{e.name}</Link><div className="cellsub" style={{ fontWeight: 400 }}>{e.position || "—"} · {e.employment_type}</div></td>
                 <td className="cellsub">{e.department || "—"}</td>
                 <td>{e.status === "재직" ? <span className="badge ok dotok">재직</span> : e.status === "휴직" ? <span className="badge warn dotwarn">휴직</span> : <span className="badge off">퇴사</span>}</td>
-                <td><span className="flex gap-s wrap" style={{ gap: 8 }}><Ins on={e.ins_pension} label="연금" /><Ins on={e.ins_health} label="건강" /><Ins on={e.ins_employment} label="고용" /><Ins on={e.ins_industrial} label="산재" /></span></td>
+                <td><span className="ins-badges"><Ins on={e.ins_pension} label="연금" /><Ins on={e.ins_health} label="건강" /><Ins on={e.ins_employment} label="고용" /><Ins on={e.ins_industrial} label="산재" /></span></td>
                 <td className="cellsub">
                   {won(hasOverride ? entryMap.get(e.id)! : e.salary)}
                   {hasOverride && <span style={{ fontSize: 10, background: "var(--ink)", color: "var(--paper)", padding: "1px 4px", borderRadius: 3, marginLeft: 4 }}>월별</span>}
