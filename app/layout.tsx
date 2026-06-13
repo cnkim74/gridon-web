@@ -3,6 +3,7 @@ import { Archivo, Space_Mono } from "next/font/google";
 import "./globals.css";
 import "./pages.css";
 import SiteScripts from "@/components/SiteScripts";
+import { AuthProvider } from "@/components/AuthProvider";
 
 const archivo = Archivo({
   subsets: ["latin"],
@@ -42,7 +43,7 @@ export default function RootLayout({
         />
       </head>
       <body>
-        {children}
+        <AuthProvider>{children}</AuthProvider>
         <SiteScripts />
       </body>
     </html>

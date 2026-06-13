@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+# 공개 NEXT_PUBLIC 값만 담긴 프로덕션 env — CI 빌드에서 사용하므로 추적한다.
+!.env.production
 
 # vercel
 .vercel

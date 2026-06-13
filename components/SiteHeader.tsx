@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Wordmark } from "./Wordmark";
+import { useAuth } from "./AuthProvider";
 import { MENU } from "@/lib/nav";
 
 function SearchIcon() {
@@ -21,6 +22,8 @@ export default function SiteHeader() {
     (m) => pathname === m.href || pathname.startsWith(`${m.href}/`),
   )?.key;
   const [open, setOpen] = useState(false);
+  const { user, profile, signOut } = useAuth();
+  const displayName = profile?.name || user?.email?.split("@")[0] || "회원";
 
   const openDrawer = () => {
     setOpen(true);
@@ -29,6 +32,10 @@ export default function SiteHeader() {
   const closeDrawer = () => {
     setOpen(false);
     document.body.style.overflow = "";
+  };
+  const handleLogout = async () => {
+    await signOut();
+    closeDrawer();
   };
 
   return (
@@ -64,9 +71,20 @@ export default function SiteHeader() {
             <Link className="icon-btn desk" href="/support#contact" aria-label="검색">
               <SearchIcon />
             </Link>
-            <Link className="btn btn--sm btn--ghost desk" href="/login">
-              로그인
-            </Link>
+            {user ? (
+              <>
+                <span className="desk" style={{ fontSize: 13.5, fontWeight: 700, color: "var(--muted)" }}>
+                  {displayName}님
+                </span>
+                <button className="btn btn--sm btn--ghost desk" type="button" onClick={handleLogout}>
+                  로그아웃
+                </button>
+              </>
+            ) : (
+              <Link className="btn btn--sm btn--ghost desk" href="/login">
+                로그인
+              </Link>
+            )}
             <Link className="btn btn--sm desk" href="/admin/dashboard">
               관리자
             </Link>
@@ -105,14 +123,29 @@ export default function SiteHeader() {
               {m.label}
             </Link>
           ))}
-          <div className="flex gap-s" style={{ marginTop: 24 }}>
-            <Link
-              className="btn btn--ghost btn--block"
-              href="/login"
-              onClick={closeDrawer}
-            >
-              로그인
-            </Link>
+          {user && (
+            <p style={{ marginTop: 18, fontSize: 14, fontWeight: 700, color: "var(--muted)" }}>
+              {displayName}님, 환영합니다.
+            </p>
+          )}
+          <div className="flex gap-s" style={{ marginTop: user ? 12 : 24 }}>
+            {user ? (
+              <button
+                className="btn btn--ghost btn--block"
+                type="button"
+                onClick={handleLogout}
+              >
+                로그아웃
+              </button>
+            ) : (
+              <Link
+                className="btn btn--ghost btn--block"
+                href="/login"
+                onClick={closeDrawer}
+              >
+                로그인
+              </Link>
+            )}
             <Link
               className="btn btn--block"
               href="/admin/dashboard"
