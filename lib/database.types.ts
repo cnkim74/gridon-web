@@ -27,6 +27,8 @@ export type Database = {
           name: string | null;
           member_type: MemberType;
           role: UserRole;
+          phone: string | null;
+          avatar_url: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -36,6 +38,8 @@ export type Database = {
           name?: string | null;
           member_type?: MemberType;
           role?: UserRole;
+          phone?: string | null;
+          avatar_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -45,6 +49,8 @@ export type Database = {
           name?: string | null;
           member_type?: MemberType;
           role?: UserRole;
+          phone?: string | null;
+          avatar_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };

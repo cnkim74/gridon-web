@@ -19,6 +19,8 @@ export type Profile = {
   name: string | null;
   member_type: MemberType;
   role: UserRole;
+  phone: string | null;
+  avatar_url: string | null;
 };
 
 type AuthState = {
@@ -27,10 +29,14 @@ type AuthState = {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  /** Re-fetch the signed-in user's profile (call after editing it). */
+  refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
+
+const PROFILE_COLUMNS = "id, email, name, member_type, role, phone, avatar_url";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
@@ -48,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function loadProfile(uid: string) {
       const { data } = await supabase
         .from("profiles")
-        .select("id, email, name, member_type, role")
+        .select(PROFILE_COLUMNS)
         .eq("id", uid)
         .maybeSingle();
       if (active) setProfile((data as Profile) ?? null);
@@ -81,15 +87,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   }, []);
 
+  const userId = session?.user?.id ?? null;
+  const refreshProfile = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await supabase
+      .from("profiles")
+      .select(PROFILE_COLUMNS)
+      .eq("id", userId)
+      .maybeSingle();
+    setProfile((data as Profile) ?? null);
+  }, [userId]);
+
   const value = useMemo<AuthState>(
     () => ({
       loading,
       session,
       user: session?.user ?? null,
       profile,
+      refreshProfile,
       signOut,
     }),
-    [loading, session, profile, signOut],
+    [loading, session, profile, refreshProfile, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

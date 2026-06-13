@@ -16,6 +16,25 @@ function SearchIcon() {
   );
 }
 
+function Avatar({ url, name, size = 30 }: { url: string | null; name: string; size?: number }) {
+  return (
+    <span
+      style={{
+        width: size, height: size, borderRadius: "50%", overflow: "hidden", flex: "none",
+        background: "var(--ink)", color: "var(--paper)", display: "inline-flex",
+        alignItems: "center", justifyContent: "center", fontSize: size * 0.45, fontWeight: 800,
+      }}
+    >
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      ) : (
+        name.slice(0, 1)
+      )}
+    </span>
+  );
+}
+
 export default function SiteHeader() {
   const pathname = usePathname();
   const active = MENU.find(
@@ -24,6 +43,7 @@ export default function SiteHeader() {
   const [open, setOpen] = useState(false);
   const { user, profile, signOut } = useAuth();
   const displayName = profile?.name || user?.email?.split("@")[0] || "회원";
+  const avatarUrl = profile?.avatar_url ?? null;
 
   const openDrawer = () => {
     setOpen(true);
@@ -73,9 +93,15 @@ export default function SiteHeader() {
             </Link>
             {user ? (
               <>
-                <span className="desk" style={{ fontSize: 13.5, fontWeight: 700, color: "var(--muted)" }}>
-                  {displayName}님
-                </span>
+                <Link
+                  className="desk flex aic gap-s"
+                  href="/mypage"
+                  aria-label="마이페이지"
+                  style={{ textDecoration: "none", color: "var(--ink)" }}
+                >
+                  <Avatar url={avatarUrl} name={displayName} />
+                  <span style={{ fontSize: 13.5, fontWeight: 700 }}>{displayName}</span>
+                </Link>
                 <button className="btn btn--sm btn--ghost desk" type="button" onClick={handleLogout}>
                   로그아웃
                 </button>
@@ -124,9 +150,15 @@ export default function SiteHeader() {
             </Link>
           ))}
           {user && (
-            <p style={{ marginTop: 18, fontSize: 14, fontWeight: 700, color: "var(--muted)" }}>
-              {displayName}님, 환영합니다.
-            </p>
+            <Link
+              href="/mypage"
+              onClick={closeDrawer}
+              className="flex aic gap-s"
+              style={{ marginTop: 18, textDecoration: "none", color: "var(--ink)" }}
+            >
+              <Avatar url={avatarUrl} name={displayName} size={34} />
+              <span style={{ fontSize: 14, fontWeight: 700 }}>{displayName}님 · 마이페이지</span>
+            </Link>
           )}
           <div className="flex gap-s" style={{ marginTop: user ? 12 : 24 }}>
             {user ? (
