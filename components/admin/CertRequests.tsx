@@ -14,11 +14,13 @@ type Req = {
   reject_reason: string | null;
   exit_date: string | null;
   issued_at: string | null;
+  approved_by: string | null;
   created_at: string;
   employees: {
     name: string; department: string | null; position: string | null;
     hire_date: string | null; status: string;
   };
+  profiles: { name: string | null } | null; // approved_by 프로필
 };
 
 type TabVal = "all" | CertStatus;
@@ -56,7 +58,7 @@ export default function CertRequests() {
   function load() {
     setLoading(true);
     supabase.from("cert_requests")
-      .select("id, cert_type, purpose, status, reject_reason, exit_date, issued_at, created_at, employees(name, department, position, hire_date, status)")
+      .select("id, cert_type, purpose, status, reject_reason, exit_date, issued_at, approved_by, created_at, employees(name, department, position, hire_date, status), profiles(name)")
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
         setLoading(false);
@@ -106,6 +108,7 @@ export default function CertRequests() {
     exitDate: viewReq.exit_date,
     purpose: viewReq.purpose,
     issuedAt: viewReq.issued_at!,
+    approverName: viewReq.profiles?.name ?? null,
   } : null;
 
   const visible = tab === "all" ? reqs : reqs.filter((r) => r.status === tab);
@@ -192,42 +195,40 @@ export default function CertRequests() {
       )}
 
       {/* Main content */}
-      <div style={{ padding: "24px 28px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
-          <div>
-            <h1 className="kr-d3" style={{ fontSize: 22, fontWeight: 800 }}>증명서 관리</h1>
-            <p className="muted" style={{ fontSize: 13, marginTop: 2 }}>재직·경력 증명서 발급 신청을 검토하고 승인합니다.</p>
-          </div>
+      <div style={{ padding: "32px 36px" }}>
+        <div style={{ marginBottom: 28 }}>
+          <h1 className="kr-d3" style={{ fontSize: 24, fontWeight: 800 }}>증명서 관리</h1>
+          <p className="muted" style={{ fontSize: 13.5, marginTop: 4 }}>재직·경력 증명서 발급 신청을 검토하고 승인합니다.</p>
         </div>
 
         {err && !approvingId && !rejectingId && (
-          <div role="alert" style={{ color: "#b3261e", fontSize: 13.5, border: "1px solid var(--line-2)", padding: "10px 12px", marginBottom: 14 }}>{err}</div>
+          <div role="alert" style={{ color: "#b3261e", fontSize: 13.5, border: "1px solid var(--line-2)", padding: "10px 14px", marginBottom: 18, borderRadius: 4 }}>{err}</div>
         )}
 
         {/* Tabs */}
-        <div className="flex gap-s" style={{ marginBottom: 16, borderBottom: "1px solid var(--line-2)", paddingBottom: 0 }}>
+        <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "1px solid var(--line-2)" }}>
           {TABS.map(([v, label]) => (
             <button key={v} type="button"
               onClick={() => setTab(v)}
               style={{
-                background: "none", border: "none", cursor: "pointer", padding: "8px 12px",
-                fontSize: 13.5, fontWeight: tab === v ? 700 : 400,
+                background: "none", border: "none", cursor: "pointer", padding: "10px 18px",
+                fontSize: 14, fontWeight: tab === v ? 700 : 400,
                 color: tab === v ? "var(--ink)" : "var(--muted)",
                 borderBottom: tab === v ? "2px solid var(--ink)" : "2px solid transparent",
-                marginBottom: -1,
+                marginBottom: -1, transition: "color .15s",
               }}>
               {label}
             </button>
           ))}
         </div>
 
-        <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="panel" style={{ padding: 0, overflow: "auto" }}>
           {loading ? (
-            <div className="cellsub" style={{ padding: 28, textAlign: "center" }}>불러오는 중…</div>
+            <div className="cellsub" style={{ padding: 40, textAlign: "center" }}>불러오는 중…</div>
           ) : visible.length === 0 ? (
-            <div className="cellsub" style={{ padding: 28, textAlign: "center" }}>신청 내역이 없습니다.</div>
+            <div className="cellsub" style={{ padding: 40, textAlign: "center" }}>신청 내역이 없습니다.</div>
           ) : (
-            <table className="table">
+            <table className="table" style={{ minWidth: 720 }}>
               <thead>
                 <tr>
                   <th>신청일</th>

@@ -11,6 +11,7 @@ export type CertData = {
   exitDate: string | null;    // 경력증명서용
   purpose: string | null;
   issuedAt: string;           // ISO string, 발급(승인) 일시
+  approverName: string | null; // 승인자(대표이사) 이름
 };
 
 function fmtDate(iso: string | null) {
@@ -25,7 +26,8 @@ function fmtDateSlash(iso: string | null) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function Stamp() {
+function Stamp({ name }: { name: string | null }) {
+  const label = name || "대표이사인";
   return (
     <svg
       width="90" height="90" viewBox="0 0 90 90"
@@ -40,8 +42,8 @@ function Stamp() {
       <text x="45" y="53" textAnchor="middle" fontSize="13" fill="#B22222"
         fontFamily="'Noto Serif KR', 'Malgun Gothic', serif" fontWeight="900">그 리 드 온</text>
       <line x1="18" y1="60" x2="72" y2="60" stroke="#B22222" strokeWidth="0.8" />
-      <text x="45" y="74" textAnchor="middle" fontSize="9" fill="#B22222"
-        fontFamily="'Noto Serif KR', 'Malgun Gothic', serif" fontWeight="700">대 표 이 사 인</text>
+      <text x="45" y="74" textAnchor="middle" fontSize={label.length > 5 ? "8" : "9"} fill="#B22222"
+        fontFamily="'Noto Serif KR', 'Malgun Gothic', serif" fontWeight="700">{label}</text>
     </svg>
   );
 }
@@ -123,9 +125,14 @@ export default function CertDoc({ data }: { data: CertData }) {
         <div style={{ display: "inline-block", textAlign: "right", position: "relative" }}>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>주식회사 그 리 드 온</div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
-            <span style={{ fontSize: 14 }}>대 표 이 사</span>
+            <div>
+              <div style={{ fontSize: 14 }}>대 표 이 사</div>
+              {data.approverName && (
+                <div style={{ fontSize: 13, marginTop: 2, letterSpacing: 1 }}>{data.approverName}</div>
+              )}
+            </div>
             <span style={{ display: "inline-block", position: "relative", top: -4 }}>
-              <Stamp />
+              <Stamp name={data.approverName} />
             </span>
           </div>
         </div>

@@ -14,7 +14,8 @@ type Emp = {
 type CertReq = {
   id: string; cert_type: CertType; purpose: string | null; status: CertStatus;
   reject_reason: string | null; exit_date: string | null; issued_at: string | null;
-  created_at: string;
+  approved_by: string | null; created_at: string;
+  profiles: { name: string | null } | null;
 };
 
 const STATUS_LABEL: Record<CertStatus, string> = { pending: "검토중", approved: "발급완료", rejected: "반려" };
@@ -56,14 +57,14 @@ export default function MyCert() {
         setEmp((data as Emp) ?? null);
         if (!data) { setLoading(false); return; }
         supabase.from("cert_requests")
-          .select("id, cert_type, purpose, status, reject_reason, exit_date, issued_at, created_at")
+          .select("id, cert_type, purpose, status, reject_reason, exit_date, issued_at, approved_by, created_at, profiles(name)")
           .eq("employee_id", (data as Emp).id)
           .order("created_at", { ascending: false })
           .then(({ data: reqs, error: e2 }) => {
             if (!active) return;
             setLoading(false);
             if (e2) { setErr(e2.message); return; }
-            setReqs((reqs as CertReq[]) ?? []);
+            setReqs((reqs as unknown as CertReq[]) ?? []);
           });
       });
     return () => { active = false; };
@@ -95,6 +96,7 @@ export default function MyCert() {
     exitDate: viewReq.exit_date,
     purpose: viewReq.purpose,
     issuedAt: viewReq.issued_at!,
+    approverName: viewReq.profiles?.name ?? null,
   } : null;
 
   if (!user) return <div className="cellsub" style={{ padding: 40 }}>로그인이 필요합니다.</div>;
