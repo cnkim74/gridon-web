@@ -44,6 +44,8 @@ export default function SiteHeader() {
   const { user, profile, signOut } = useAuth();
   const displayName = profile?.name || user?.email?.split("@")[0] || "회원";
   const avatarUrl = profile?.avatar_url ?? null;
+  const isAdmin = profile?.role === "admin" || profile?.role === "superadmin";
+  const isStaff = profile?.member_type === "직원";
 
   const openDrawer = () => {
     setOpen(true);
@@ -102,6 +104,9 @@ export default function SiteHeader() {
                   <Avatar url={avatarUrl} name={displayName} />
                   <span style={{ fontSize: 13.5, fontWeight: 700 }}>{displayName}</span>
                 </Link>
+                {isStaff && (
+                  <Link className="btn btn--sm btn--ghost desk" href="/mypage/attendance">내 출근부</Link>
+                )}
                 <button className="btn btn--sm btn--ghost desk" type="button" onClick={handleLogout}>
                   로그아웃
                 </button>
@@ -111,9 +116,9 @@ export default function SiteHeader() {
                 로그인
               </Link>
             )}
-            <Link className="btn btn--sm desk" href="/admin/dashboard">
-              관리자
-            </Link>
+            {isAdmin && (
+              <Link className="btn btn--sm desk" href="/admin/dashboard">관리자</Link>
+            )}
             <button
               className="icon-btn menu-toggle"
               aria-label="메뉴 열기"
@@ -160,6 +165,11 @@ export default function SiteHeader() {
               <span style={{ fontSize: 14, fontWeight: 700 }}>{displayName}님 · 마이페이지</span>
             </Link>
           )}
+          {isStaff && (
+            <Link href="/mypage/attendance" className="drawer-link" onClick={closeDrawer} style={{ marginTop: 8 }}>
+              내 출근부
+            </Link>
+          )}
           <div className="flex gap-s" style={{ marginTop: user ? 12 : 24 }}>
             {user ? (
               <button
@@ -178,13 +188,9 @@ export default function SiteHeader() {
                 로그인
               </Link>
             )}
-            <Link
-              className="btn btn--block"
-              href="/admin/dashboard"
-              onClick={closeDrawer}
-            >
-              관리자
-            </Link>
+            {isAdmin && (
+              <Link className="btn btn--block" href="/admin/dashboard" onClick={closeDrawer}>관리자</Link>
+            )}
           </div>
         </aside>
       </div>

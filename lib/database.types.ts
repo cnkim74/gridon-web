@@ -14,7 +14,7 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
-export type MemberType = "개인" | "기업";
+export type MemberType = "개인" | "기업" | "직원";
 export type UserRole = "member" | "admin" | "superadmin";
 export type EmploymentType = "정규직" | "계약직" | "일용직" | "파견";
 export type EmployeeStatus = "재직" | "휴직" | "퇴사";
@@ -80,6 +80,7 @@ export type Database = {
           ins_health: boolean;
           ins_employment: boolean;
           ins_industrial: boolean;
+          profile_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -101,6 +102,7 @@ export type Database = {
           ins_health?: boolean;
           ins_employment?: boolean;
           ins_industrial?: boolean;
+          profile_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -122,6 +124,7 @@ export type Database = {
           ins_health?: boolean;
           ins_employment?: boolean;
           ins_industrial?: boolean;
+          profile_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };

@@ -17,6 +17,8 @@ type Row = {
   created_at: string;
 };
 
+type EmpOpt = { id: string; name: string; position: string | null; department: string | null };
+
 const COLS = "id, email, name, member_type, role, phone, avatar_url, created_at";
 const ROLE_LABEL: Record<UserRole, string> = { superadmin: "슈퍼관리자", admin: "관리자", member: "회원" };
 
@@ -52,38 +54,31 @@ function RoleBadge({ role }: { role: UserRole }) {
   return <span className="badge ok dotok">{ROLE_LABEL[role]}</span>;
 }
 
+type CatType = "전체" | "개인" | "기업" | "직원" | "관리자";
+
 export default function MembersTable() {
   const { profile } = useAuth();
   const canEdit = profile?.role === "admin" || profile?.role === "superadmin";
 
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cat, setCat] = useState<"전체" | "개인" | "기업" | "관리자">("전체");
+  const [cat, setCat] = useState<CatType>("전체");
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<Row | null>(null);
 
-  // Refetch after an edit (called from an event handler, not an effect).
   const load = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select(COLS)
-      .order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("profiles").select(COLS).order("created_at", { ascending: false });
     if (error) setError(error.message);
     else setRows((data as Row[]) ?? []);
   }, []);
 
-  // Initial load — setState lives inside the .then callback (not the effect body).
   useEffect(() => {
     let active = true;
-    supabase
-      .from("profiles")
-      .select(COLS)
-      .order("created_at", { ascending: false })
-      .then(({ data, error }) => {
-        if (!active) return;
-        if (error) setError(error.message);
-        else setRows((data as Row[]) ?? []);
-      });
+    supabase.from("profiles").select(COLS).order("created_at", { ascending: false }).then(({ data, error }) => {
+      if (!active) return;
+      if (error) setError(error.message);
+      else setRows((data as Row[]) ?? []);
+    });
     return () => { active = false; };
   }, []);
 
@@ -93,6 +88,7 @@ export default function MembersTable() {
     return rows.filter((r) => {
       if (cat === "개인" && r.member_type !== "개인") return false;
       if (cat === "기업" && r.member_type !== "기업") return false;
+      if (cat === "직원" && r.member_type !== "직원") return false;
       if (cat === "관리자" && r.role === "member") return false;
       if (s) {
         const hay = `${r.name ?? ""} ${r.email ?? ""} ${r.phone ?? ""}`.toLowerCase();
@@ -109,6 +105,7 @@ export default function MembersTable() {
       total: all.length,
       personal: all.filter((r) => r.member_type === "개인").length,
       biz: all.filter((r) => r.member_type === "기업").length,
+      staff: all.filter((r) => r.member_type === "직원").length,
       thisMonth: all.filter((r) => {
         const d = new Date(r.created_at);
         return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
@@ -122,8 +119,7 @@ export default function MembersTable() {
     const csv = [header, ...body].map((c) => c.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `gridon-members-${fmtDate(new Date().toISOString())}.csv`; a.click();
+    const a = document.createElement("a"); a.href = url; a.download = `gridon-members-${fmtDate(new Date().toISOString())}.csv`; a.click();
     URL.revokeObjectURL(url);
   }
 
@@ -132,7 +128,7 @@ export default function MembersTable() {
   return (
     <>
       <div className="apage-head">
-        <div><h1>회원 관리</h1><p>개인·기업 회원 계정을 조회하고 관리합니다.</p></div>
+        <div><h1>회원 관리</h1><p>개인·기업·직원 회원 계정을 조회하고 관리합니다.</p></div>
         <div className="flex gap-s wrap">
           <button className="btn btn--sm btn--ghost" onClick={exportCsv} disabled={loading || filtered.length === 0}>내보내기 (CSV)</button>
         </div>
@@ -142,13 +138,14 @@ export default function MembersTable() {
         <div className="kpi"><div className="kl">총 회원</div><div className="kv">{loading ? "—" : kpi.total.toLocaleString()}</div></div>
         <div className="kpi"><div className="kl">개인 회원</div><div className="kv">{loading ? "—" : kpi.personal.toLocaleString()}</div></div>
         <div className="kpi"><div className="kl">기업 회원</div><div className="kv">{loading ? "—" : kpi.biz.toLocaleString()}</div></div>
+        <div className="kpi"><div className="kl">직원</div><div className="kv">{loading ? "—" : kpi.staff.toLocaleString()}</div></div>
         <div className="kpi"><div className="kl">신규 (이번 달)</div><div className="kv">{loading ? "—" : kpi.thisMonth.toLocaleString()}</div></div>
       </div>
 
       <div className="panel">
         <div className="panel-body">
           <div className="atable-tools">
-            <SegFilter options={["전체", "개인", "기업", "관리자"]} onChange={(_, label) => setCat(label as typeof cat)} />
+            <SegFilter options={["전체", "개인", "기업", "직원", "관리자"]} onChange={(_, label) => setCat(label as CatType)} />
             <div className="search-mini">
               <SearchIcon />
               <input placeholder="이름·이메일·전화 검색" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -181,7 +178,9 @@ export default function MembersTable() {
                 </td>
                 <td className="cellsub">{r.email}</td>
                 <td className="cellsub">{r.phone || "—"}</td>
-                <td><span className="badge off">{r.member_type}</span></td>
+                <td>
+                  <span className={`badge ${r.member_type === "직원" ? "warn" : "off"}`}>{r.member_type}</span>
+                </td>
                 <td><RoleBadge role={r.role} /></td>
                 <td className="cellsub">{fmtDate(r.created_at)}</td>
                 {canEdit && (
@@ -215,14 +214,60 @@ function EditModal({ member, onClose, onSaved }: { member: Row; onClose: () => v
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // 직원 연결용
+  const [linkedEmpId, setLinkedEmpId] = useState("");
+  const [empList, setEmpList] = useState<EmpOpt[]>([]);
+
+  // 기존 연결된 직원 로드 (모달 오픈 시, 이미 직원인 경우)
+  useEffect(() => {
+    if (member.member_type !== "직원") return;
+    let active = true;
+    supabase.from("employees").select("id").eq("profile_id", member.id).maybeSingle().then(({ data }) => {
+      if (!active) return;
+      if (data) setLinkedEmpId((data as { id: string }).id);
+    });
+    return () => { active = false; };
+  }, [member.id, member.member_type]);
+
+  // memberType이 직원일 때 연결 가능한 직원 목록 로드
+  useEffect(() => {
+    if (memberType !== "직원") return;
+    let active = true;
+    supabase.from("employees")
+      .select("id, name, position, department")
+      .or(`profile_id.is.null,profile_id.eq.${member.id}`)
+      .order("name")
+      .then(({ data }) => {
+        if (!active) return;
+        setEmpList((data as EmpOpt[]) ?? []);
+      });
+    return () => { active = false; };
+  }, [memberType, member.id]);
+
   async function save() {
     setErr(null);
     setSaving(true);
-    const { error } = await supabase
+
+    // 프로필 업데이트
+    const { error: profErr } = await supabase
       .from("profiles")
       .update({ name: name.trim(), phone: phone.trim() || null, member_type: memberType, role })
       .eq("id", member.id);
-    if (error) { setErr(error.message); setSaving(false); return; }
+    if (profErr) { setErr(profErr.message); setSaving(false); return; }
+
+    // 직원 연결/해제 처리
+    if (member.member_type === "직원" && memberType !== "직원") {
+      // 직원 → 다른 구분: 기존 연결 해제
+      await supabase.from("employees").update({ profile_id: null }).eq("profile_id", member.id);
+    } else if (memberType === "직원" && linkedEmpId) {
+      // 직원 구분 유지 또는 새로 설정: 기존 연결 있으면 먼저 해제 후 새로 연결
+      if (member.member_type === "직원") {
+        await supabase.from("employees").update({ profile_id: null }).eq("profile_id", member.id);
+      }
+      const { error: empErr } = await supabase.from("employees").update({ profile_id: member.id }).eq("id", linkedEmpId);
+      if (empErr) { setErr(empErr.message); setSaving(false); return; }
+    }
+
     await onSaved();
   }
 
@@ -240,11 +285,32 @@ function EditModal({ member, onClose, onSaved }: { member: Row; onClose: () => v
           <div className="field"><label>휴대전화</label><input className="input" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="010-1234-5678" /></div>
           <div className="field">
             <label>구분</label>
-            <select className="input" value={memberType} onChange={(e) => setMemberType(e.target.value as MemberType)}>
+            <select className="input" value={memberType} onChange={(e) => {
+              const v = e.target.value as MemberType;
+              setMemberType(v);
+              if (v !== "직원") setLinkedEmpId("");
+            }}>
               <option value="개인">개인</option>
               <option value="기업">기업</option>
+              <option value="직원">직원</option>
             </select>
           </div>
+
+          {memberType === "직원" && (
+            <div className="field">
+              <label>연결 직원 (직원 현황)</label>
+              <select className="input" value={linkedEmpId} onChange={(e) => setLinkedEmpId(e.target.value)}>
+                <option value="">— 선택 안 함 —</option>
+                {empList.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name}{e.position ? ` · ${e.position}` : ""}{e.department ? ` · ${e.department}` : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>직원 현황의 어느 직원과 이 계정을 연결할지 선택합니다. 연결 시 직원 본인이 "내 출근부"를 조회할 수 있습니다.</p>
+            </div>
+          )}
+
           <div className="field">
             <label>권한</label>
             <select className="input" value={role} onChange={(e) => setRole(e.target.value as UserRole)}>

@@ -26,10 +26,11 @@ export type Employee = {
   ins_health: boolean;
   ins_employment: boolean;
   ins_industrial: boolean;
+  profile_id: string | null;
 };
 
 export const EMP_COLS =
-  "id, name, position, department, phone, email, hire_date, employment_type, status, memo, photo_url, rrn_masked, salary, pay_type, ins_pension, ins_health, ins_employment, ins_industrial";
+  "id, name, position, department, phone, email, hire_date, employment_type, status, memo, photo_url, rrn_masked, salary, pay_type, ins_pension, ins_health, ins_employment, ins_industrial, profile_id";
 const EMP_TYPES: EmploymentType[] = ["정규직", "계약직", "일용직", "파견"];
 const STATUSES: EmployeeStatus[] = ["재직", "휴직", "퇴사"];
 const PAY_TYPES: PayType[] = ["월급", "일급", "시급", "기타소득", "사업소득"];
@@ -152,7 +153,17 @@ export default function EmployeesTable() {
             {!loading && !error && filtered.length === 0 && <tr><td colSpan={7} className="cellsub" style={{ textAlign: "center", padding: 28 }}>등록된 직원이 없습니다. “직원 등록”으로 추가하세요.</td></tr>}
             {!loading && !error && filtered.map((r) => (
               <tr key={r.id}>
-                <td><Link href={`/admin/employee/?id=${r.id}`} className="flex aic gap-s" style={{ textDecoration: "none", color: "var(--ink)" }}><Photo url={r.photo_url} name={r.name} /><span className="strong" style={{ borderBottom: "1px solid var(--line-2)" }}>{r.name}</span></Link></td>
+                <td>
+                  <Link href={`/admin/employee/?id=${r.id}`} className="flex aic gap-s" style={{ textDecoration: "none", color: "var(--ink)" }}>
+                    <Photo url={r.photo_url} name={r.name} />
+                    <span>
+                      <span className="strong" style={{ borderBottom: "1px solid var(--line-2)" }}>{r.name}</span>
+                      {r.profile_id
+                        ? <span className="badge ok" style={{ marginLeft: 6, fontSize: 10, padding: "1px 5px" }}>회원연결</span>
+                        : <span className="badge off" style={{ marginLeft: 6, fontSize: 10, padding: "1px 5px" }}>미연결</span>}
+                    </span>
+                  </Link>
+                </td>
                 <td>{r.position || "—"}</td>
                 <td>{r.department || "—"}</td>
                 <td className="cellsub">{r.hire_date || "—"}</td>
