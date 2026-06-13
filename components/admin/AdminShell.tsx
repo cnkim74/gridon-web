@@ -59,11 +59,6 @@ const NAV: [string, Link3[]][] = [
     ["quotes", "견적서", "/admin/quotes"],
     ["finance", "수입·지출", "/admin/finance"],
   ]],
-  ["게시판", [
-    ["notices", "공지사항", "/admin/notices"],
-    ["qna", "질의응답", "/admin/qna"],
-    ["gallery", "실적·갤러리", "/admin/gallery"],
-  ]],
   ["데이터", [["usage", "요금·사용량", "/admin/usage"]]],
 ];
 
