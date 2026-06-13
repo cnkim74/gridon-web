@@ -106,4 +106,67 @@ export function deductions(opts: {
 export const ym = {
   now() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; },
   nextStart(s: string) { const [y, m] = s.split("-").map(Number); return m === 12 ? `${y + 1}-01-01` : `${y}-${pad(m + 1)}-01`; },
+  label(s: string) { const [y, m] = s.split("-"); return `${y}년 ${parseInt(m)}월`; },
 };
+
+// ── 사업주 부담 4대보험 요율 (2024 기준) ────────────────────────────────────
+// 산재보험: 전기공사업 기준 2.5% (건설업 분류·근로복지공단 고지서 확인 필요)
+export const EMPLOYER_RATES = {
+  pension:          0.045,   // 국민연금 4.5%
+  health:           0.03545, // 건강보험 3.545%
+  care:             0.1295,  // 장기요양 = 건강보험료 × 12.95%
+  employment_ue:    0.009,   // 고용보험 실업급여 0.9%
+  employment_stab:  0.0025,  // 고용안정·직업능력개발 0.25% (150인 미만 우선지원기업)
+  industrial:       0.025,   // 산재보험 2.5% (전기공사업 추정 — 고지서 확인 후 조정)
+} as const;
+
+export type InsInput = {
+  pay_type: PayType;
+  ins_pension: boolean;
+  ins_health: boolean;
+  ins_employment: boolean;
+  ins_industrial: boolean;
+};
+
+export type InsResult = {
+  pension:    number;
+  health:     number;
+  care:       number;
+  employment: number; // 사업주: 실업급여+고용안정 합산 / 근로자: 실업급여만
+  industrial: number;
+  total:      number;
+};
+
+const ZERO_INS: InsResult = { pension: 0, health: 0, care: 0, employment: 0, industrial: 0, total: 0 };
+
+export function calcEmployeeIns(salary: number, e: InsInput): InsResult {
+  if (isFreelance(e.pay_type)) return { ...ZERO_INS };
+  const pension    = e.ins_pension    ? Math.round(salary * INS_RATES.pension)    : 0;
+  const health     = e.ins_health     ? Math.round(salary * INS_RATES.health)     : 0;
+  const care       = e.ins_health     ? Math.round(health  * INS_RATES.care)      : 0;
+  const employment = e.ins_employment ? Math.round(salary * INS_RATES.employment) : 0;
+  const total = pension + health + care + employment;
+  return { pension, health, care, employment, industrial: 0, total };
+}
+
+export function calcEmployerIns(salary: number, e: InsInput): InsResult {
+  if (isFreelance(e.pay_type)) return { ...ZERO_INS };
+  const pension    = e.ins_pension    ? Math.round(salary * EMPLOYER_RATES.pension) : 0;
+  const health     = e.ins_health     ? Math.round(salary * EMPLOYER_RATES.health)  : 0;
+  const care       = e.ins_health     ? Math.round(health  * EMPLOYER_RATES.care)   : 0;
+  const employment = e.ins_employment ? Math.round(salary * (EMPLOYER_RATES.employment_ue + EMPLOYER_RATES.employment_stab)) : 0;
+  const industrial = e.ins_industrial ? Math.round(salary * EMPLOYER_RATES.industrial) : 0;
+  const total = pension + health + care + employment + industrial;
+  return { pension, health, care, employment, industrial, total };
+}
+
+export function addIns(a: InsResult, b: InsResult): InsResult {
+  return {
+    pension:    a.pension    + b.pension,
+    health:     a.health     + b.health,
+    care:       a.care       + b.care,
+    employment: a.employment + b.employment,
+    industrial: a.industrial + b.industrial,
+    total:      a.total      + b.total,
+  };
+}
