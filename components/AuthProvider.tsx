@@ -11,13 +11,14 @@ import {
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import type { MemberType } from "@/lib/database.types";
+import type { MemberType, UserRole } from "@/lib/database.types";
 
 export type Profile = {
   id: string;
   email: string | null;
   name: string | null;
   member_type: MemberType;
+  role: UserRole;
 };
 
 type AuthState = {
@@ -47,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function loadProfile(uid: string) {
       const { data } = await supabase
         .from("profiles")
-        .select("id, email, name, member_type")
+        .select("id, email, name, member_type, role")
         .eq("id", uid)
         .maybeSingle();
       if (active) setProfile((data as Profile) ?? null);

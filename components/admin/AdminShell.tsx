@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Wordmark } from "@/components/Wordmark";
+import { useAuth } from "@/components/AuthProvider";
 
 function Icon({ children }: { children: ReactNode }) {
   return (
@@ -34,12 +35,65 @@ const NAV: [string, Link3[]][] = [
   ["데이터", [["usage", "요금·사용량", "/admin/usage"]]],
 ];
 
+const ROLE_LABEL: Record<string, string> = {
+  superadmin: "슈퍼관리자",
+  admin: "관리자",
+  member: "회원",
+};
+
+/** Centered full-area message used while gating access. */
+function Gate({ title, desc, action }: { title: string; desc?: string; action?: ReactNode }) {
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ textAlign: "center", maxWidth: 380 }}>
+        <div className="kr-d3" style={{ fontSize: 22, fontWeight: 800 }}>{title}</div>
+        {desc && <p className="muted" style={{ marginTop: 10, fontSize: 14 }}>{desc}</p>}
+        {action && <div style={{ marginTop: 20 }}>{action}</div>}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { loading, user, profile, signOut } = useAuth();
+  const isAdmin = profile?.role === "admin" || profile?.role === "superadmin";
+
   const allLinks = NAV.flatMap(([, links]) => links);
   const activeLink = allLinks.find(([, , href]) => pathname === href);
   const title = activeLink?.[1] ?? "";
   const [navOpen, setNavOpen] = useState(false);
+
+  // Not signed in → send to login. (Data is also protected by RLS; this is UX.)
+  useEffect(() => {
+    if (!loading && !user) router.replace("/login");
+  }, [loading, user, router]);
+
+  const handleLogout = async () => {
+    await signOut();
+    router.replace("/login");
+  };
+
+  // --- Access gating ---------------------------------------------------------
+  if (loading) {
+    return <Gate title="확인 중…" />;
+  }
+  if (!user) {
+    return <Gate title="로그인이 필요합니다" desc="관리자 콘솔은 로그인 후 이용할 수 있습니다." action={<Link className="btn btn--sm" href="/login">로그인으로 이동</Link>} />;
+  }
+  if (!isAdmin) {
+    return (
+      <Gate
+        title="접근 권한이 없습니다"
+        desc={`이 계정(${profile?.email ?? user.email})은 관리자 권한이 없습니다. 관리자에게 권한을 요청하세요.`}
+        action={<Link className="btn btn--sm btn--ghost" href="/">사이트로 돌아가기</Link>}
+      />
+    );
+  }
+
+  const adminName = profile?.name || profile?.email?.split("@")[0] || "관리자";
+  const roleLabel = ROLE_LABEL[profile?.role ?? "admin"] ?? "관리자";
 
   return (
     <div className={`admin${navOpen ? " nav-open" : ""}`} id="admin">
@@ -69,10 +123,15 @@ export default function AdminShell({ children }: { children: ReactNode }) {
             <Icon><path d="M9 18l-6-6 6-6M3 12h13" /></Icon>
             <span>사이트로 돌아가기</span>
           </Link>
-          <Link className="side-link" href="/login" style={{ paddingLeft: 0 }}>
+          <button
+            className="side-link"
+            type="button"
+            onClick={handleLogout}
+            style={{ paddingLeft: 0, background: "none", border: 0, cursor: "pointer", width: "100%", textAlign: "left", font: "inherit" }}
+          >
             <Icon><path d="M16 17l5-5-5-5M21 12H9M9 4H5v16h4" /></Icon>
             <span>로그아웃</span>
-          </Link>
+          </button>
         </div>
       </aside>
 
@@ -98,10 +157,10 @@ export default function AdminShell({ children }: { children: ReactNode }) {
               <span style={{ position: "absolute", top: 7, right: 8, width: 6, height: 6, borderRadius: "50%", background: "var(--ink)" }} />
             </button>
             <div className="flex aic gap-s">
-              <span className="avatar">관</span>
+              <span className="avatar">{adminName.slice(0, 1)}</span>
               <div className="desk" style={{ lineHeight: 1.2 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>운영관리자</div>
-                <div style={{ fontSize: 11, color: "var(--muted)" }}>admin@gridon.co.kr</div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{adminName} · {roleLabel}</div>
+                <div style={{ fontSize: 11, color: "var(--muted)" }}>{profile?.email ?? user.email}</div>
               </div>
             </div>
           </div>
