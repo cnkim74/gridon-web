@@ -37,8 +37,15 @@ type Draft = {
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const CATS = ["식비·접대", "교통·운반", "사무용품", "통신비", "공과금", "임차료", "인건비", "기타"];
+const CATS = ["공사 자재·장비", "식비·접대", "교통·운반", "차량 용품", "사무용품", "통신비", "공과금", "임차료", "인건비", "개인 용품", "기타"];
 const PAYS = ["법인카드", "현금", "계좌이체", "기타"];
+
+// 엑셀(그리드온 양식) 카테고리 → 내부 카테고리 매핑
+const CAT_MAP: Record<string, string> = {
+  "식대": "식비·접대",
+  "차량 유류비": "교통·운반",
+  "교통비": "교통·운반",
+};
 const MONTHS = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
 const BAR_COLORS = ["#111","#333","#555","#777","#999","#bbb","#ccc","#ddd"];
 
@@ -254,10 +261,60 @@ function ExpenseEditor({ expense, onSave, onClose }: { expense: Expense | null; 
 
 // ── Excel importer ─────────────────────────────────────────────────────────
 
+type FileFormat = "template" | "gridon";
+
+// 그리드온 양식에서 미리보기용 컬럼 인덱스 (전체내역 기준)
+// 지사(0) 일자(2) 구입처(4) 품목명(5) 합계(11) 카테고리(12)
+const GRIDON_PREVIEW_COLS = [0, 2, 4, 5, 11, 12];
+const GRIDON_PREVIEW_LABELS = ["지사", "일자", "구입처", "품목명", "합계(원)", "카테고리"];
+
+function mapCat(raw: string): string {
+  const c = String(raw ?? "").trim();
+  return CAT_MAP[c] ?? (CATS.includes(c) ? c : "기타");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseGridonRows(wb: XLSX.WorkBook): any[][] {
+  // 1) 전체내역 시트 우선
+  const allWs = wb.Sheets["📋 전체내역"];
+  if (allWs) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw = XLSX.utils.sheet_to_json<any[]>(allWs, { header: 1, defval: "" });
+    const hi = raw.findIndex((r) => Array.isArray(r) && r.some((c) => String(c) === "일자" || String(c) === "지사"));
+    if (hi >= 0) {
+      return [raw[hi], ...raw.slice(hi + 1).filter((r) => r[2] && String(r[2]).trim() !== "")];
+    }
+  }
+  // 2) 지사별 시트를 합침 (대시보드·전체내역 제외)
+  const branches = wb.SheetNames.filter((n) => !n.includes("대시보드") && !n.includes("📋") && !n.includes("📊"));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const combined: any[][] = [];
+  let headerSet = false;
+  for (const name of branches) {
+    const ws = wb.Sheets[name];
+    if (!ws) continue;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" });
+    const hi = raw.findIndex((r) => Array.isArray(r) && r.some((c) => String(c) === "일자"));
+    if (hi < 0) continue;
+    if (!headerSet) {
+      combined.push(["지사", "월", ...raw[hi]]);
+      headerSet = true;
+    }
+    const branch = name.split("_")[0];
+    const month = name.split("_")[1] ?? "";
+    raw.slice(hi + 1)
+      .filter((r) => r[0] && String(r[0]).trim() !== "")
+      .forEach((r) => combined.push([branch, month, ...r]));
+  }
+  return combined;
+}
+
 function ExcelImporter({ onImport, onClose }: { onImport: () => void; onClose: () => void }) {
   const { user } = useAuth();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [rows, setRows] = useState<any[][]>([]);
+  const [format, setFormat] = useState<FileFormat>("template");
   const [importing, setImporting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -266,9 +323,27 @@ function ExcelImporter({ onImport, onClose }: { onImport: () => void; onClose: (
     reader.onload = (e) => {
       try {
         const wb = XLSX.read(e.target?.result, { type: "binary", cellDates: true });
+
+        // 그리드온 양식 감지: '📋 전체내역' 시트 있거나 시트명에 지사명 포함
+        const isGridon =
+          wb.SheetNames.includes("📋 전체내역") ||
+          wb.SheetNames.some((n) => n.includes("지사") || n.includes("_202"));
+
+        if (isGridon) {
+          const parsed = parseGridonRows(wb);
+          if (parsed.length > 1) {
+            setRows(parsed);
+            setFormat("gridon");
+            setErr(null);
+            return;
+          }
+        }
+
+        // 일반 템플릿 양식
         const ws = wb.Sheets[wb.SheetNames[0]];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setRows(XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" }));
+        setFormat("template");
         setErr(null);
       } catch {
         setErr("파일을 읽을 수 없습니다.");
@@ -291,18 +366,52 @@ function ExcelImporter({ onImport, onClose }: { onImport: () => void; onClose: (
   async function doImport() {
     if (rows.length < 2) return;
     setImporting(true); setErr(null);
-    const records = rows.slice(1)
-      .map((r) => ({
-        tx_date: toDateStr(r[0]),
-        amount: parseInt(String(r[1] ?? "0").replace(/[^0-9]/g, ""), 10),
-        category: CATS.includes(String(r[2]).trim()) ? String(r[2]).trim() : "기타",
-        vendor: String(r[3] ?? "").trim() || null,
-        description: String(r[4] ?? "").trim() || null,
-        payment_method: String(r[5] ?? "법인카드").trim() || "법인카드",
-        source: "excel",
-        created_by: user?.id ?? null,
-      }))
-      .filter((r) => r.tx_date && r.amount > 0);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let records: any[];
+
+    if (format === "gridon") {
+      // 전체내역 헤더: 지사(0) 월(1) 일자(2) 요일(3) 구입처(4) 품목명(5) 규격(6)
+      //               수량(7) 단가(8) 공급가액(9) 부가세(10) 합계(11) 카테고리(12) 비고(13)
+      records = rows.slice(1)
+        .map((r) => {
+          const branch = String(r[0] ?? "").trim();
+          const spec = String(r[6] ?? "").trim();
+          const qty = r[7];
+          const price = r[8];
+          const note = String(r[13] ?? "").trim();
+          let desc = String(r[5] ?? "").trim();
+          if (spec) desc += ` (${spec})`;
+          if (qty && price) desc += ` × ${qty} @ ${Number(price).toLocaleString("ko-KR")}원`;
+          if (note) desc += ` / ${note}`;
+          if (branch) desc = `[${branch}] ${desc}`;
+
+          return {
+            tx_date: toDateStr(r[2]),
+            amount: parseInt(String(r[11] ?? "0").replace(/[^0-9]/g, ""), 10),
+            category: mapCat(String(r[12] ?? "")),
+            vendor: String(r[4] ?? "").trim() || null,
+            description: desc || null,
+            payment_method: "기타",
+            source: "excel",
+            created_by: user?.id ?? null,
+          };
+        })
+        .filter((r) => r.tx_date && r.amount > 0);
+    } else {
+      records = rows.slice(1)
+        .map((r) => ({
+          tx_date: toDateStr(r[0]),
+          amount: parseInt(String(r[1] ?? "0").replace(/[^0-9]/g, ""), 10),
+          category: mapCat(String(r[2] ?? "")),
+          vendor: String(r[3] ?? "").trim() || null,
+          description: String(r[4] ?? "").trim() || null,
+          payment_method: String(r[5] ?? "법인카드").trim() || "법인카드",
+          source: "excel",
+          created_by: user?.id ?? null,
+        }))
+        .filter((r) => r.tx_date && r.amount > 0);
+    }
 
     if (records.length === 0) { setErr("가져올 유효한 데이터가 없습니다."); setImporting(false); return; }
     const { error }: SbaRes = await sba.from("expenses").insert(records);
@@ -311,7 +420,16 @@ function ExcelImporter({ onImport, onClose }: { onImport: () => void; onClose: (
     onImport();
   }
 
-  const preview = rows.slice(0, 11);
+  // 미리보기: 그리드온은 주요 컬럼만 추출
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const previewRows: any[][] = format === "gridon"
+    ? [
+        GRIDON_PREVIEW_LABELS,
+        ...rows.slice(1, 11).map((r) => GRIDON_PREVIEW_COLS.map((ci) => r[ci])),
+      ]
+    : rows.slice(0, 11);
+
+  const dataCount = rows.length > 1 ? rows.length - 1 : 0;
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 20px 60px", overflowY: "auto" }}>
@@ -322,28 +440,33 @@ function ExcelImporter({ onImport, onClose }: { onImport: () => void; onClose: (
         </div>
 
         <p style={{ fontSize: 13.5, color: "var(--muted)", marginBottom: 16, lineHeight: 1.7 }}>
-          헤더 행 포함 · 열 순서: <strong>날짜 / 금액 / 분류 / 거래처 / 내용 / 결제수단</strong>
-          <br />분류는 {CATS.join(", ")} 중 하나를 입력하세요.
+          <strong>그리드온 영수증 정리 양식</strong>과 <strong>직접 입력 템플릿</strong> 모두 자동 인식합니다.
+          <br />템플릿 열 순서: 날짜 / 금액 / 분류 / 거래처 / 내용 / 결제수단
         </p>
 
         <label style={{ display: "block", border: "1.5px dashed var(--line-2)", borderRadius: 6, padding: "28px 20px", textAlign: "center", cursor: "pointer", background: "var(--faint)", marginBottom: 20 }}>
           <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) parseFile(f); }} />
-          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>파일 선택 / 드래그</div>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>파일 선택</div>
           <div style={{ fontSize: 13, color: "var(--muted)" }}>.xlsx · .xls · .csv</div>
         </label>
 
-        {rows.length > 0 && (
+        {rows.length > 1 && (
           <>
-            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>
-              미리보기 (최대 10행) · 전체 <strong>{rows.length - 1}건</strong>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8, display: "flex", gap: 12, alignItems: "center" }}>
+              <span>미리보기 (최대 10행) · 전체 <strong>{dataCount}건</strong></span>
+              {format === "gridon" && (
+                <span style={{ background: "var(--ink)", color: "var(--paper)", fontSize: 11, padding: "2px 8px", borderRadius: 10, fontWeight: 700 }}>
+                  그리드온 양식 자동 감지
+                </span>
+              )}
             </div>
             <div style={{ overflowX: "auto", marginBottom: 20 }}>
               <table className="dtable" style={{ minWidth: 560 }}>
                 <thead>
-                  <tr>{(preview[0] ?? []).map((h, i) => <th key={i} style={{ fontSize: 12 }}>{String(h)}</th>)}</tr>
+                  <tr>{(previewRows[0] ?? []).map((h, i) => <th key={i} style={{ fontSize: 12 }}>{String(h)}</th>)}</tr>
                 </thead>
                 <tbody>
-                  {preview.slice(1).map((row, ri) => (
+                  {previewRows.slice(1).map((row, ri) => (
                     <tr key={ri}>
                       {(row as unknown[]).map((cell, ci) => <td key={ci} style={{ fontSize: 13 }}>{String(cell)}</td>)}
                     </tr>
@@ -357,8 +480,8 @@ function ExcelImporter({ onImport, onClose }: { onImport: () => void; onClose: (
         {err && <p style={{ color: "#b3261e", fontSize: 13, marginBottom: 14 }}>{err}</p>}
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <button className="btn btn--ghost btn--sm" type="button" onClick={onClose}>취소</button>
-          <button className="btn btn--sm" type="button" onClick={doImport} disabled={rows.length < 2 || importing}>
-            {importing ? "가져오는 중…" : `${Math.max(0, rows.length - 1)}건 가져오기`}
+          <button className="btn btn--sm" type="button" onClick={doImport} disabled={dataCount === 0 || importing}>
+            {importing ? "가져오는 중…" : `${dataCount}건 가져오기`}
           </button>
         </div>
       </div>
