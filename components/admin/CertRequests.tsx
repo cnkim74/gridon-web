@@ -29,8 +29,8 @@ const STATUS_LABEL: Record<CertStatus, string> = { pending: "검토중", approve
 const STATUS_CLS: Record<CertStatus, string> = { pending: "badge warn", approved: "badge ok", rejected: "badge off" };
 
 const printCss = `
-  .no-print { display: none !important; }
   @media print {
+    .no-print { display: none !important; }
     body > * { display: none !important; }
     #cert-doc-wrap { display: block !important; position: fixed; inset: 0; z-index: 9999; background: #fff; }
     #cert-doc-wrap #cert-doc { width: 100% !important; padding: 14mm 16mm !important; }
@@ -231,34 +231,38 @@ export default function CertRequests() {
             <table className="table" style={{ minWidth: 720 }}>
               <thead>
                 <tr>
-                  <th>신청일</th>
-                  <th>직원</th>
-                  <th>종류</th>
-                  <th>용도</th>
-                  <th>상태</th>
-                  <th>발급일</th>
-                  <th className="no-print"></th>
+                  <th style={{ textAlign: "center" }}>신청일</th>
+                  <th style={{ textAlign: "center" }}>직원</th>
+                  <th style={{ textAlign: "center" }}>종류</th>
+                  <th style={{ textAlign: "center" }}>용도</th>
+                  <th style={{ textAlign: "center" }}>상태</th>
+                  <th style={{ textAlign: "center" }}>발급일</th>
+                  <th style={{ textAlign: "center" }}></th>
                 </tr>
               </thead>
               <tbody>
                 {visible.map((r) => (
                   <tr key={r.id}>
-                    <td className="cellsub">{r.created_at.slice(0, 10)}</td>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{r.employees.name}</div>
-                      <div className="muted" style={{ fontSize: 11.5 }}>{r.employees.department || "—"} · {r.employees.position || "—"}</div>
+                    <td style={{ textAlign: "center" }} className="cellsub">{r.created_at.slice(0, 10)}</td>
+                    <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
+                      <span style={{ fontWeight: 600 }}>{r.employees.name}</span>
+                      {(r.employees.department || r.employees.position) && (
+                        <span className="muted" style={{ fontSize: 12, marginLeft: 6 }}>
+                          {[r.employees.department, r.employees.position].filter(Boolean).join(" · ")}
+                        </span>
+                      )}
                     </td>
-                    <td>{r.cert_type}</td>
-                    <td className="cellsub">{r.purpose || "—"}</td>
-                    <td>
+                    <td style={{ textAlign: "center" }}>{r.cert_type}</td>
+                    <td style={{ textAlign: "center" }} className="cellsub">{r.purpose || "—"}</td>
+                    <td style={{ textAlign: "center" }}>
                       <span className={STATUS_CLS[r.status]}>{STATUS_LABEL[r.status]}</span>
                       {r.status === "rejected" && r.reject_reason && (
                         <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{r.reject_reason}</div>
                       )}
                     </td>
-                    <td className="cellsub">{r.issued_at ? r.issued_at.slice(0, 10) : "—"}</td>
-                    <td className="no-print">
-                      <div className="flex gap-s">
+                    <td style={{ textAlign: "center" }} className="cellsub">{r.issued_at ? r.issued_at.slice(0, 10) : "—"}</td>
+                    <td style={{ textAlign: "center" }}>
+                      <div className="flex gap-s" style={{ justifyContent: "center" }}>
                         {r.status === "pending" && (
                           <>
                             <button className="btn btn--sm" onClick={() => { setErr(null); setApprovingId(r.id); setExitDate(""); }}>승인</button>
