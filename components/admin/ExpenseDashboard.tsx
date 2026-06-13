@@ -1,0 +1,625 @@
+"use client";
+import { useEffect, useRef, useState } from "react";
+import * as XLSX from "xlsx";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const sba = supabase as any;
+type SbaRes = { data: unknown; error: { message: string } | null };
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const BUCKET = "receipts";
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+type Expense = {
+  id: string;
+  tx_date: string;
+  amount: number;
+  category: string;
+  vendor: string | null;
+  description: string | null;
+  payment_method: string | null;
+  receipt_url: string | null;
+  source: string;
+  created_at: string;
+};
+
+type Draft = {
+  tx_date: string;
+  amount: string;
+  category: string;
+  vendor: string;
+  description: string;
+  payment_method: string;
+  receipt_url: string | null;
+};
+
+// ── Constants ──────────────────────────────────────────────────────────────
+
+const CATS = ["식비·접대", "교통·운반", "사무용품", "통신비", "공과금", "임차료", "인건비", "기타"];
+const PAYS = ["법인카드", "현금", "계좌이체", "기타"];
+const MONTHS = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+const BAR_COLORS = ["#111","#333","#555","#777","#999","#bbb","#ccc","#ddd"];
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function fmt(n: number) { return n.toLocaleString("ko-KR") + "원"; }
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+function padMonth(m: number) { return String(m).padStart(2, "0"); }
+
+function toDateStr(val: unknown): string {
+  if (val instanceof Date) return val.toISOString().slice(0, 10);
+  if (typeof val === "number") {
+    // Excel serial date (days since 1899-12-30)
+    return new Date((val - 25569) * 86400000).toISOString().slice(0, 10);
+  }
+  const s = String(val ?? "").trim().replace(/[./]/g, "-");
+  if (/^\d{4}-\d{1,2}-\d{1,2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+}
+
+// ── Bar chart (CSS-based) ──────────────────────────────────────────────────
+
+function BarChart({ bars, highlight }: { bars: { label: string; val: number }[]; highlight?: number }) {
+  const peak = Math.max(...bars.map((b) => b.val), 1);
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 128, paddingTop: 8 }}>
+      {bars.map((b, i) => (
+        <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 0 }}>
+          <div style={{
+            width: "100%",
+            height: `${Math.max(3, (b.val / peak) * 104)}px`,
+            background: i === highlight ? "var(--ink)" : "var(--faint)",
+            border: i === highlight ? "none" : "1px solid var(--line-2)",
+            borderRadius: "3px 3px 0 0",
+            transition: "height .35s ease",
+          }} />
+          <span style={{ fontSize: 10, color: i === highlight ? "var(--ink)" : "var(--muted)", fontWeight: i === highlight ? 700 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{b.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Category breakdown ─────────────────────────────────────────────────────
+
+function CatBreakdown({ expenses }: { expenses: Expense[] }) {
+  const totals = CATS
+    .map((c) => ({ cat: c, total: expenses.filter((e) => e.category === c).reduce((s, e) => s + e.amount, 0) }))
+    .filter((x) => x.total > 0)
+    .sort((a, b) => b.total - a.total);
+  const grand = totals.reduce((s, x) => s + x.total, 0) || 1;
+  if (totals.length === 0) return <p className="muted" style={{ fontSize: 14, padding: "20px 0" }}>지출 데이터 없음</p>;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {totals.slice(0, 6).map((x, i) => (
+        <div key={x.cat}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+            <span style={{ color: "var(--muted)" }}>{x.cat}</span>
+            <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)" }}>{fmt(x.total)}</span>
+          </div>
+          <div style={{ height: 6, background: "var(--faint)", borderRadius: 3, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${(x.total / grand) * 100}%`, background: BAR_COLORS[i], borderRadius: 3, transition: "width .4s ease" }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Expense editor modal ───────────────────────────────────────────────────
+
+function ExpenseEditor({ expense, onSave, onClose }: { expense: Expense | null; onSave: () => void; onClose: () => void }) {
+  const { user } = useAuth();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [d, setD] = useState<Draft>(() => ({
+    tx_date: expense?.tx_date ?? todayStr(),
+    amount: expense ? expense.amount.toLocaleString("ko-KR") : "",
+    category: expense?.category ?? "기타",
+    vendor: expense?.vendor ?? "",
+    description: expense?.description ?? "",
+    payment_method: expense?.payment_method ?? "법인카드",
+    receipt_url: expense?.receipt_url ?? null,
+  }));
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  function set(k: keyof Draft, v: string | null) { setD((p) => ({ ...p, [k]: v })); }
+
+  async function uploadReceipt(file: File) {
+    setUploading(true); setErr(null);
+    const ext = file.name.split(".").pop() ?? "jpg";
+    const path = `${user?.id ?? "anon"}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: true });
+    setUploading(false);
+    if (error) { setErr(error.message); return; }
+    set("receipt_url", `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`);
+  }
+
+  async function save() {
+    if (!d.tx_date) { setErr("날짜를 입력하세요."); return; }
+    const amt = parseInt(d.amount.replace(/[^0-9]/g, ""), 10);
+    if (isNaN(amt) || amt <= 0) { setErr("올바른 금액을 입력하세요."); return; }
+    setSaving(true); setErr(null);
+    const base = {
+      tx_date: d.tx_date, amount: amt, category: d.category,
+      vendor: d.vendor.trim() || null, description: d.description.trim() || null,
+      payment_method: d.payment_method, receipt_url: d.receipt_url,
+    };
+    const payload = expense ? base : { ...base, source: "manual", created_by: user?.id ?? null };
+    const req = expense
+      ? sba.from("expenses").update(payload).eq("id", expense.id)
+      : sba.from("expenses").insert(payload);
+    const { error }: SbaRes = await req;
+    setSaving(false);
+    if (error) { setErr((error as { message: string }).message); return; }
+    onSave();
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 20px 60px", overflowY: "auto" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--paper)", borderRadius: 8, padding: "28px 32px", width: "100%", maxWidth: 640, boxShadow: "0 24px 64px rgba(0,0,0,.3)" }}>
+        <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 22 }}>{expense ? "지출 편집" : "새 지출 등록"}</h2>
+
+        {/* Receipt upload */}
+        <div
+          onClick={() => fileRef.current?.click()}
+          style={{ border: "1.5px dashed var(--line-2)", borderRadius: 6, padding: "16px 20px", marginBottom: 20, cursor: "pointer", display: "flex", alignItems: "center", gap: 16, background: "var(--faint)" }}
+        >
+          {d.receipt_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={d.receipt_url} alt="영수증" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 4, border: "1px solid var(--line)", flexShrink: 0 }} />
+          ) : (
+            <div style={{ width: 72, height: 72, borderRadius: 4, background: "var(--line-2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" style={{ opacity: .45 }}>
+                <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" /><path d="M21 15l-5-5L5 21" />
+              </svg>
+            </div>
+          )}
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
+              {uploading ? "업로드 중…" : d.receipt_url ? "영수증 변경" : "영수증 첨부"}
+            </div>
+            <div style={{ fontSize: 12.5, color: "var(--muted)" }}>카메라 촬영 또는 파일 선택 · JPG · PNG · PDF</div>
+          </div>
+        </div>
+        {/* capture="environment" opens camera on mobile, ignored on desktop */}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,application/pdf"
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore – capture is a valid HTML attribute for file inputs
+          capture="environment"
+          style={{ display: "none" }}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadReceipt(f); }}
+        />
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+          <div className="field">
+            <label>날짜</label>
+            <input className="input" type="date" value={d.tx_date} onChange={(e) => set("tx_date", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>금액 (원)</label>
+            <input className="input" type="text" inputMode="numeric" placeholder="50,000" value={d.amount}
+              onChange={(e) => set("amount", e.target.value)}
+              onBlur={(e) => {
+                const n = parseInt(e.target.value.replace(/[^0-9]/g, ""), 10);
+                if (!isNaN(n)) set("amount", n.toLocaleString("ko-KR"));
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+          <div className="field">
+            <label>분류</label>
+            <select className="input" value={d.category} onChange={(e) => set("category", e.target.value)}>
+              {CATS.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>결제수단</label>
+            <select className="input" value={d.payment_method} onChange={(e) => set("payment_method", e.target.value)}>
+              {PAYS.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="field" style={{ marginBottom: 14 }}>
+          <label>거래처</label>
+          <input className="input" placeholder="○○식당, ○○주유소…" value={d.vendor} onChange={(e) => set("vendor", e.target.value)} />
+        </div>
+
+        <div className="field" style={{ marginBottom: 22 }}>
+          <label>내용</label>
+          <textarea className="input" rows={3} placeholder="지출 내용" value={d.description} onChange={(e) => set("description", e.target.value)} style={{ resize: "vertical" }} />
+        </div>
+
+        {err && <p style={{ color: "#b3261e", fontSize: 13, marginBottom: 14 }}>{err}</p>}
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button className="btn btn--ghost btn--sm" type="button" onClick={onClose}>취소</button>
+          <button className="btn btn--sm" type="button" onClick={save} disabled={saving || uploading}>
+            {saving ? "저장 중…" : expense ? "저장" : "등록"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Excel importer ─────────────────────────────────────────────────────────
+
+function ExcelImporter({ onImport, onClose }: { onImport: () => void; onClose: () => void }) {
+  const { user } = useAuth();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [rows, setRows] = useState<any[][]>([]);
+  const [importing, setImporting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  function parseFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target?.result, { type: "binary", cellDates: true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setRows(XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" }));
+        setErr(null);
+      } catch {
+        setErr("파일을 읽을 수 없습니다.");
+      }
+    };
+    reader.readAsBinaryString(file);
+  }
+
+  function downloadTemplate() {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["날짜", "금액", "분류", "거래처", "내용", "결제수단"],
+      ["2026-06-14", 50000, "식비·접대", "○○식당", "점심 회식", "법인카드"],
+      ["2026-06-15", 30000, "교통·운반", "○○주유소", "출장 주유", "법인카드"],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "지출내역");
+    XLSX.writeFile(wb, "expense_template.xlsx");
+  }
+
+  async function doImport() {
+    if (rows.length < 2) return;
+    setImporting(true); setErr(null);
+    const records = rows.slice(1)
+      .map((r) => ({
+        tx_date: toDateStr(r[0]),
+        amount: parseInt(String(r[1] ?? "0").replace(/[^0-9]/g, ""), 10),
+        category: CATS.includes(String(r[2]).trim()) ? String(r[2]).trim() : "기타",
+        vendor: String(r[3] ?? "").trim() || null,
+        description: String(r[4] ?? "").trim() || null,
+        payment_method: String(r[5] ?? "법인카드").trim() || "법인카드",
+        source: "excel",
+        created_by: user?.id ?? null,
+      }))
+      .filter((r) => r.tx_date && r.amount > 0);
+
+    if (records.length === 0) { setErr("가져올 유효한 데이터가 없습니다."); setImporting(false); return; }
+    const { error }: SbaRes = await sba.from("expenses").insert(records);
+    setImporting(false);
+    if (error) { setErr((error as { message: string }).message); return; }
+    onImport();
+  }
+
+  const preview = rows.slice(0, 11);
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 20px 60px", overflowY: "auto" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--paper)", borderRadius: 8, padding: "28px 32px", width: "100%", maxWidth: 860, boxShadow: "0 24px 64px rgba(0,0,0,.3)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 800 }}>엑셀 가져오기</h2>
+          <button type="button" className="btn btn--ghost btn--sm" onClick={downloadTemplate}>템플릿 다운로드</button>
+        </div>
+
+        <p style={{ fontSize: 13.5, color: "var(--muted)", marginBottom: 16, lineHeight: 1.7 }}>
+          헤더 행 포함 · 열 순서: <strong>날짜 / 금액 / 분류 / 거래처 / 내용 / 결제수단</strong>
+          <br />분류는 {CATS.join(", ")} 중 하나를 입력하세요.
+        </p>
+
+        <label style={{ display: "block", border: "1.5px dashed var(--line-2)", borderRadius: 6, padding: "28px 20px", textAlign: "center", cursor: "pointer", background: "var(--faint)", marginBottom: 20 }}>
+          <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) parseFile(f); }} />
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>파일 선택 / 드래그</div>
+          <div style={{ fontSize: 13, color: "var(--muted)" }}>.xlsx · .xls · .csv</div>
+        </label>
+
+        {rows.length > 0 && (
+          <>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>
+              미리보기 (최대 10행) · 전체 <strong>{rows.length - 1}건</strong>
+            </div>
+            <div style={{ overflowX: "auto", marginBottom: 20 }}>
+              <table className="dtable" style={{ minWidth: 560 }}>
+                <thead>
+                  <tr>{(preview[0] ?? []).map((h, i) => <th key={i} style={{ fontSize: 12 }}>{String(h)}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {preview.slice(1).map((row, ri) => (
+                    <tr key={ri}>
+                      {(row as unknown[]).map((cell, ci) => <td key={ci} style={{ fontSize: 13 }}>{String(cell)}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {err && <p style={{ color: "#b3261e", fontSize: 13, marginBottom: 14 }}>{err}</p>}
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button className="btn btn--ghost btn--sm" type="button" onClick={onClose}>취소</button>
+          <button className="btn btn--sm" type="button" onClick={doImport} disabled={rows.length < 2 || importing}>
+            {importing ? "가져오는 중…" : `${Math.max(0, rows.length - 1)}건 가져오기`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main dashboard ─────────────────────────────────────────────────────────
+
+export default function ExpenseDashboard() {
+  const now = new Date();
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [viewMode, setViewMode] = useState<"year" | "month">("month");
+  const [modal, setModal] = useState<"add" | "excel" | null>(null);
+  const [editExp, setEditExp] = useState<Expense | null>(null);
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+  const [catFilter, setCatFilter] = useState("전체");
+  const [search, setSearch] = useState("");
+  const [rev, setRev] = useState(0);
+
+  useEffect(() => {
+    setLoading(true);
+    sba.from("expenses").select("*")
+      .gte("tx_date", `${year}-01-01`)
+      .lte("tx_date", `${year}-12-31`)
+      .order("tx_date", { ascending: false })
+      .then(({ data }: SbaRes) => {
+        setLoading(false);
+        setExpenses((data as Expense[]) ?? []);
+      });
+  }, [year, rev]);
+
+  const curMonthPfx = `${year}-${padMonth(month)}`;
+  const today = todayStr();
+
+  // KPI
+  const todayTotal = expenses.filter((e) => e.tx_date === today).reduce((s, e) => s + e.amount, 0);
+  const monthTotal = expenses.filter((e) => e.tx_date.startsWith(curMonthPfx)).reduce((s, e) => s + e.amount, 0);
+  const yearTotal = expenses.reduce((s, e) => s + e.amount, 0);
+  const monthCount = expenses.filter((e) => e.tx_date.startsWith(curMonthPfx)).length;
+
+  // Chart bars
+  const monthlyBars = MONTHS.map((label, i) => ({
+    label: `${i + 1}월`,
+    val: expenses.filter((e) => parseInt(e.tx_date.slice(5, 7)) === i + 1).reduce((s, e) => s + e.amount, 0),
+  }));
+
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const dailyBars = Array.from({ length: daysInMonth }, (_, i) => {
+    const d = `${curMonthPfx}-${padMonth(i + 1)}`;
+    return { label: String(i + 1), val: expenses.filter((e) => e.tx_date === d).reduce((s, e) => s + e.amount, 0) };
+  });
+
+  // Filtered list for table
+  const baseExpenses = viewMode === "month"
+    ? expenses.filter((e) => e.tx_date.startsWith(curMonthPfx))
+    : expenses;
+  const listExpenses = baseExpenses.filter((e) => {
+    if (catFilter !== "전체" && e.category !== catFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (e.vendor ?? "").toLowerCase().includes(q) || (e.description ?? "").toLowerCase().includes(q);
+    }
+    return true;
+  });
+  const listTotal = listExpenses.reduce((s, e) => s + e.amount, 0);
+
+  // Month navigation
+  function prevMonth() { if (month === 1) { setYear((y) => y - 1); setMonth(12); } else setMonth((m) => m - 1); }
+  function nextMonth() { if (month === 12) { setYear((y) => y + 1); setMonth(1); } else setMonth((m) => m + 1); }
+
+  async function del(id: string) {
+    if (!confirm("삭제하시겠습니까?")) return;
+    await sba.from("expenses").delete().eq("id", id);
+    setRev((r) => r + 1);
+  }
+
+  const chipStyle = (active: boolean): React.CSSProperties => ({
+    padding: "5px 12px", border: "1px solid var(--line-2)", borderRadius: 20, fontSize: 12.5, cursor: "pointer",
+    background: active ? "var(--ink)" : "transparent", color: active ? "var(--paper)" : "inherit", fontWeight: active ? 700 : 400,
+  });
+
+  return (
+    <>
+      <div className="apage-head">
+        <div><h1>지출 관리</h1><p>영수증·엑셀 등록 및 일별·월별·연별 지출 현황</p></div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn--ghost btn--sm" type="button" onClick={() => setModal("excel")}>엑셀 가져오기</button>
+          <button className="btn btn--sm" type="button" onClick={() => { setEditExp(null); setModal("add"); }}>＋ 새 지출</button>
+        </div>
+      </div>
+
+      {/* KPI */}
+      <div className="kpis">
+        <div className="kpi"><div className="kl">오늘</div><div className="kv" style={{ fontSize: 18 }}>{fmt(todayTotal)}</div></div>
+        <div className="kpi"><div className="kl">{month}월 합계</div><div className="kv" style={{ fontSize: 18 }}>{fmt(monthTotal)}</div></div>
+        <div className="kpi"><div className="kl">{year}년 합계</div><div className="kv" style={{ fontSize: 18 }}>{fmt(yearTotal)}</div></div>
+        <div className="kpi"><div className="kl">{month}월 건수</div><div className="kv">{monthCount}건</div></div>
+      </div>
+
+      {/* Chart + Category */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16, marginBottom: 16 }}>
+        {/* Bar chart panel */}
+        <div className="panel">
+          <div className="panel-body" style={{ borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 6 }}>
+              {(["year", "month"] as const).map((m) => (
+                <button key={m} type="button" style={chipStyle(viewMode === m)} onClick={() => setViewMode(m)}>
+                  {m === "year" ? "연도별" : "월별"}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {viewMode === "month" ? (
+                <>
+                  <button type="button" onClick={prevMonth} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "var(--muted)", lineHeight: 1 }}>‹</button>
+                  <span style={{ fontWeight: 700, fontSize: 14, minWidth: 80, textAlign: "center" }}>{year}년 {month}월</span>
+                  <button type="button" onClick={nextMonth} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "var(--muted)", lineHeight: 1 }}>›</button>
+                </>
+              ) : (
+                <>
+                  <button type="button" onClick={() => setYear((y) => y - 1)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "var(--muted)", lineHeight: 1 }}>‹</button>
+                  <span style={{ fontWeight: 700, fontSize: 14, minWidth: 60, textAlign: "center" }}>{year}년</span>
+                  <button type="button" onClick={() => setYear((y) => y + 1)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "var(--muted)", lineHeight: 1 }}>›</button>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="panel-body">
+            {loading ? (
+              <p className="muted" style={{ textAlign: "center", padding: "32px 0" }}>불러오는 중…</p>
+            ) : (
+              <BarChart
+                bars={viewMode === "year" ? monthlyBars : dailyBars}
+                highlight={viewMode === "year" ? month - 1 : undefined}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Category breakdown */}
+        <div className="panel">
+          <div className="panel-body" style={{ borderBottom: "1px solid var(--line-2)" }}>
+            <span style={{ fontWeight: 700, fontSize: 14 }}>
+              {viewMode === "month" ? `${month}월` : `${year}년`} 분류별
+            </span>
+          </div>
+          <div className="panel-body">
+            {loading ? <p className="muted" style={{ fontSize: 14 }}>불러오는 중…</p> : (
+              <CatBreakdown
+                expenses={viewMode === "month"
+                  ? expenses.filter((e) => e.tx_date.startsWith(curMonthPfx))
+                  : expenses}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Expense list */}
+      <div className="panel">
+        <div className="panel-body">
+          <div className="atable-tools">
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+              {["전체", ...CATS].map((c) => (
+                <button key={c} type="button" style={chipStyle(catFilter === c)} onClick={() => setCatFilter(c)}>{c}</button>
+              ))}
+            </div>
+            <div className="search-mini">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+              <input placeholder="거래처·내용 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+          </div>
+        </div>
+
+        <table className="dtable">
+          <thead>
+            <tr>
+              <th style={{ width: 100 }}>날짜</th>
+              <th style={{ width: 100 }}>분류</th>
+              <th>거래처 · 내용</th>
+              <th style={{ width: 90 }}>결제</th>
+              <th style={{ width: 130, textAlign: "right" }}>금액 (원)</th>
+              <th style={{ width: 52 }}>영수증</th>
+              <th style={{ width: 90 }} />
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={7} style={{ textAlign: "center", padding: "40px 0", color: "var(--muted)" }}>불러오는 중…</td></tr>
+            ) : listExpenses.length === 0 ? (
+              <tr><td colSpan={7} style={{ textAlign: "center", padding: "40px 0", color: "var(--muted)" }}>지출 내역이 없습니다.</td></tr>
+            ) : listExpenses.map((e) => (
+              <tr key={e.id}>
+                <td style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--muted)" }}>{e.tx_date}</td>
+                <td><span className="badge off">{e.category}</span></td>
+                <td>
+                  {e.vendor && <div className="strong" style={{ fontSize: 14 }}>{e.vendor}</div>}
+                  {e.description && <div className="cellsub" style={{ fontSize: 12 }}>{e.description}</div>}
+                </td>
+                <td className="cellsub">{e.payment_method ?? "—"}</td>
+                <td style={{ textAlign: "right", fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: 14 }}>
+                  {e.amount.toLocaleString("ko-KR")}
+                </td>
+                <td style={{ textAlign: "center" }}>
+                  {e.receipt_url ? (
+                    <button type="button" onClick={() => setReceiptUrl(e.receipt_url!)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={e.receipt_url} alt="영수증" style={{ width: 34, height: 34, objectFit: "cover", borderRadius: 3, border: "1px solid var(--line)" }} />
+                    </button>
+                  ) : <span style={{ color: "var(--muted)", fontSize: 12 }}>—</span>}
+                </td>
+                <td>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                    <button type="button" onClick={() => { setEditExp(e); setModal("add"); }}
+                      style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--muted)", textDecoration: "underline" }}>편집</button>
+                    <button type="button" onClick={() => del(e.id)}
+                      style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#b3261e" }}>삭제</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {listExpenses.length > 0 && (
+          <div style={{ padding: "12px 22px", borderTop: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 13, color: "var(--muted)" }}>{listExpenses.length}건</span>
+            <span style={{ fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: 14 }}>합계 {fmt(listTotal)}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Modals */}
+      {modal === "add" && (
+        <ExpenseEditor
+          expense={editExp}
+          onSave={() => { setModal(null); setEditExp(null); setRev((r) => r + 1); }}
+          onClose={() => { setModal(null); setEditExp(null); }}
+        />
+      )}
+      {modal === "excel" && (
+        <ExcelImporter
+          onImport={() => { setModal(null); setRev((r) => r + 1); }}
+          onClose={() => setModal(null)}
+        />
+      )}
+
+      {/* Receipt full-view */}
+      {receiptUrl && (
+        <div onClick={() => setReceiptUrl(null)} style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(0,0,0,.85)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", maxWidth: "88vw", maxHeight: "90vh" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={receiptUrl} alt="영수증" style={{ maxWidth: "100%", maxHeight: "88vh", objectFit: "contain", borderRadius: 4, display: "block" }} />
+            <button onClick={() => setReceiptUrl(null)} style={{ position: "absolute", top: -14, right: -14, width: 30, height: 30, borderRadius: "50%", background: "var(--paper)", border: "none", cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,.3)" }}>×</button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
