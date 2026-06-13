@@ -447,7 +447,7 @@ function ExcelImporter({ onImport, onClose }: { onImport: () => void; onClose: (
           source: "excel",
           created_by: user?.id ?? null,
         };
-      }).filter((r) => r.tx_date && r.amount > 0);
+      }).filter((r) => r.tx_date && r.amount !== 0);
     } else {
       // 템플릿: 날짜(0) 금액(1) 부가세(2) 분류(3) 거래처(4) 내용(5) 결제수단(6) 지사(7)
       records = rows.slice(1).map((r) => ({
