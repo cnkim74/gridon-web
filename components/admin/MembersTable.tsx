@@ -266,7 +266,7 @@ function EditModal({ member, onClose, onSaved }: { member: Row; onClose: () => v
       }
       const { error: empErr } = await supabase.from("employees").update({ profile_id: member.id }).eq("id", linkedEmpId);
       if (empErr) { setErr(empErr.message); setSaving(false); return; }
-    } else if (memberType === "직원" && !linkedEmpId && member.member_type !== "직원") {
+    } else if (memberType === "직원" && !linkedEmpId) {
       // 직원 선택 없이 저장 → 직원 현황에 자동 등록 + 연결
       const { error: createErr } = await supabase.from("employees").insert({
         name: name.trim() || member.email?.split("@")[0] || "이름 없음",
