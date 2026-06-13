@@ -16,6 +16,7 @@ export type CertData = {
 };
 
 const STAMP_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/stamps/seal.png`;
+const LOGO_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/logos/logo.png`;
 
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
@@ -56,6 +57,27 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
       <td style={{ padding: "10px 14px", fontWeight: 600, whiteSpace: "nowrap", width: 120, background: "#f7f7f5", borderBottom: "1px solid #d0cfc8", borderRight: "1px solid #d0cfc8" }}>{label}</td>
       <td style={{ padding: "10px 14px", borderBottom: "1px solid #d0cfc8" }}>{value}</td>
     </tr>
+  );
+}
+
+function LogoWatermark() {
+  const [err, setErr] = useState(false);
+  if (err) return null;
+  return (
+    <div style={{
+      position: "absolute", inset: 0,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      pointerEvents: "none", zIndex: 0,
+    }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={LOGO_URL}
+        alt=""
+        aria-hidden="true"
+        style={{ width: 280, maxHeight: 160, objectFit: "contain", opacity: 0.06 }}
+        onError={() => setErr(true)}
+      />
+    </div>
   );
 }
 
@@ -106,7 +128,9 @@ export default function CertDoc({ data }: { data: CertData }) {
       fontFamily: "'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', sans-serif",
       width: 680, margin: "0 auto", padding: "56px 60px 48px",
       background: "#fff", color: "#111", fontSize: 14, lineHeight: 1.7,
+      position: "relative", overflow: "hidden",
     }}>
+      <LogoWatermark />
       {/* Header */}
       <div style={{ textAlign: "center", marginBottom: 48 }}>
         <div style={{ fontSize: 11, letterSpacing: 2, color: "#666", marginBottom: 8 }}>㈜ 그 리 드 온</div>
