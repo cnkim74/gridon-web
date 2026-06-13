@@ -437,8 +437,8 @@ function ExcelImporter({ onImport, onClose }: { onImport: () => void; onClose: (
         if (note) desc += ` / ${note}`;
         return {
           tx_date: toDateStr(r[2]),
-          amount: parseInt(String(r[11] ?? "0").replace(/[^0-9]/g, ""), 10),
-          vat_amount: parseInt(String(r[10] ?? "0").replace(/[^0-9]/g, ""), 10),
+          amount: Math.round(Number(r[11] ?? 0)),
+          vat_amount: Math.max(0, Math.round(Number(r[10] ?? 0))),
           category: mapCat(String(r[12] ?? "")),
           vendor: String(r[4] ?? "").trim() || null,
           description: desc || null,
