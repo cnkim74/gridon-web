@@ -24,6 +24,7 @@ const ICONS: Record<string, ReactNode> = {
   employees: (<><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="M5.5 17a3.5 3.5 0 0 1 7 0" /><path d="M15 9h4M15 13h3" /></>),
   attendance: (<><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" /><path d="m9 15 2 2 4-4" /></>),
   hrreport: (<><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" /><path d="M9 13h6M9 17h4" /></>),
+  payslip: (<><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M8 8h8M8 12h8M8 16h5" /><circle cx="16.5" cy="16.5" r="0" /></>),
 };
 
 type Link3 = [key: string, label: string, href: string];
@@ -38,6 +39,7 @@ const NAV: [string, Link3[]][] = [
   ["인사", [
     ["employees", "직원 현황", "/admin/employees"],
     ["attendance", "출근부", "/admin/attendance"],
+    ["payslip", "급여명세서", "/admin/payslip"],
     ["hrreport", "직원 종합현황", "/admin/hr-report"],
   ]],
   ["데이터", [["usage", "요금·사용량", "/admin/usage"]]],
