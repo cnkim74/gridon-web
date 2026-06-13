@@ -16,6 +16,8 @@ export type Json =
 
 export type MemberType = "개인" | "기업" | "직원";
 export type UserRole = "member" | "admin" | "superadmin";
+export type CertType = "재직증명서" | "경력증명서";
+export type CertStatus = "pending" | "approved" | "rejected";
 export type EmploymentType = "정규직" | "계약직" | "일용직" | "파견";
 export type EmployeeStatus = "재직" | "휴직" | "퇴사";
 export type PayType = "월급" | "일급" | "시급" | "기타소득" | "사업소득";
@@ -220,6 +222,48 @@ export type Database = {
           mime_type?: string | null;
           size_bytes?: number | null;
           uploaded_at?: string;
+        };
+        Relationships: [];
+      };
+      cert_requests: {
+        Row: {
+          id: string;
+          employee_id: string;
+          cert_type: CertType;
+          purpose: string | null;
+          status: CertStatus;
+          reject_reason: string | null;
+          exit_date: string | null;
+          issued_at: string | null;
+          approved_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          employee_id: string;
+          cert_type: CertType;
+          purpose?: string | null;
+          status?: CertStatus;
+          reject_reason?: string | null;
+          exit_date?: string | null;
+          issued_at?: string | null;
+          approved_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          employee_id?: string;
+          cert_type?: CertType;
+          purpose?: string | null;
+          status?: CertStatus;
+          reject_reason?: string | null;
+          exit_date?: string | null;
+          issued_at?: string | null;
+          approved_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
         };
         Relationships: [];
       };

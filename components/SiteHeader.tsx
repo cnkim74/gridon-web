@@ -105,7 +105,10 @@ export default function SiteHeader() {
                   <span style={{ fontSize: 13.5, fontWeight: 700 }}>{displayName}</span>
                 </Link>
                 {isStaff && (
-                  <Link className="btn btn--sm btn--ghost desk" href="/mypage/attendance">내 출근부</Link>
+                  <>
+                    <Link className="btn btn--sm btn--ghost desk" href="/mypage/attendance">내 출근부</Link>
+                    <Link className="btn btn--sm btn--ghost desk" href="/mypage/cert">내 증명서</Link>
+                  </>
                 )}
                 <button className="btn btn--sm btn--ghost desk" type="button" onClick={handleLogout}>
                   로그아웃
@@ -166,9 +169,10 @@ export default function SiteHeader() {
             </Link>
           )}
           {isStaff && (
-            <Link href="/mypage/attendance" className="drawer-link" onClick={closeDrawer} style={{ marginTop: 8 }}>
-              내 출근부
-            </Link>
+            <>
+              <Link href="/mypage/attendance" className="drawer-link" onClick={closeDrawer} style={{ marginTop: 8 }}>내 출근부</Link>
+              <Link href="/mypage/cert" className="drawer-link" onClick={closeDrawer}>내 증명서</Link>
+            </>
           )}
           <div className="flex gap-s" style={{ marginTop: user ? 12 : 24 }}>
             {user ? (
