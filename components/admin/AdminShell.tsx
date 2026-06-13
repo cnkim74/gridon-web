@@ -26,6 +26,7 @@ const ICONS: Record<string, ReactNode> = {
   hrreport: (<><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" /><path d="M9 13h6M9 17h4" /></>),
   payslip: (<><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M8 8h8M8 12h8M8 16h5" /><circle cx="16.5" cy="16.5" r="0" /></>),
   cert: (<><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 8h10M7 12h7" /><circle cx="15" cy="15" r="3" /><path d="m17.1 17.1 2 2" /></>),
+  stamp: (<><circle cx="12" cy="12" r="4" /><circle cx="12" cy="12" r="9" fill="none" /><line x1="3" y1="3" x2="6" y2="6" /><line x1="21" y1="3" x2="18" y2="6" /><line x1="3" y1="21" x2="6" y2="18" /><line x1="21" y1="21" x2="18" y2="18" /></>),
 };
 
 type Link3 = [key: string, label: string, href: string];
@@ -43,6 +44,7 @@ const NAV: [string, Link3[]][] = [
     ["payslip", "급여명세서", "/admin/payslip"],
     ["hrreport", "직원 종합현황", "/admin/hr-report"],
     ["cert", "증명서 관리", "/admin/cert"],
+    ["stamp", "직인 관리", "/admin/stamp"],
   ]],
   ["데이터", [["usage", "요금·사용량", "/admin/usage"]]],
 ];
