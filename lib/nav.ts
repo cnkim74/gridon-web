@@ -28,6 +28,7 @@ export const MENU: MenuItem[] = [
       ["스마트그리드", "양방향 지능형 전력망", "/services#smartgrid"],
       ["신재생 · ESS", "태양광·풍력·저장장치", "/services#renewable"],
       ["전기공사 · 용역", "설계·시공·유지보수", "/services#epc"],
+      ["실적 · 갤러리", "완공 프로젝트 포트폴리오", "/gallery"],
     ],
   },
   {
@@ -39,6 +40,7 @@ export const MENU: MenuItem[] = [
       ["요금 안내", "요금제·조회·납부", "/support#bill"],
       ["자주 묻는 질문", "FAQ", "/support#faq"],
       ["1:1 문의", "민원·상담 접수", "/support#contact"],
+      ["질의응답", "Q&A 게시판", "/qna"],
     ],
   },
   {
@@ -47,7 +49,7 @@ export const MENU: MenuItem[] = [
     href: "/newsroom",
     sub: [
       ["보도자료", "언론 발표", "/newsroom#press"],
-      ["공지사항", "점검·안내", "/newsroom#notice"],
+      ["공지사항", "점검·안내", "/notices"],
       ["미디어", "영상·갤러리", "/newsroom#media"],
     ],
   },

@@ -31,6 +31,9 @@ const ICONS: Record<string, ReactNode> = {
   insurance: (<><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="m9 12 2 2 4-4" /></>),
   quotes: (<><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /><circle cx="16" cy="16" r="0" /></>),
   finance: (<><path d="M3 3v18h18" /><path d="M7 14l4-4 3 3 5-6" /><path d="M18 8h3M21 8v3" /></>),
+  notices: (<><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></>),
+  qna: (<><path d="M4 5h16v12H8l-4 4z" /><path d="M9 10.5a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2.5-2.5 2.5" /><circle cx="11.5" cy="15" r=".6" fill="currentColor" /></>),
+  gallery: (<><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" /><path d="M21 15l-5-5L5 21" /></>),
 };
 
 type Link3 = [key: string, label: string, href: string];
@@ -55,6 +58,11 @@ const NAV: [string, Link3[]][] = [
   ["재무", [
     ["quotes", "견적서", "/admin/quotes"],
     ["finance", "수입·지출", "/admin/finance"],
+  ]],
+  ["게시판", [
+    ["notices", "공지사항", "/admin/notices"],
+    ["qna", "질의응답", "/admin/qna"],
+    ["gallery", "실적·갤러리", "/admin/gallery"],
   ]],
   ["데이터", [["usage", "요금·사용량", "/admin/usage"]]],
 ];
