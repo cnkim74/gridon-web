@@ -260,12 +260,28 @@ function EditModal({ member, onClose, onSaved }: { member: Row; onClose: () => v
       // 직원 → 다른 구분: 기존 연결 해제
       await supabase.from("employees").update({ profile_id: null }).eq("profile_id", member.id);
     } else if (memberType === "직원" && linkedEmpId) {
-      // 직원 구분 유지 또는 새로 설정: 기존 연결 있으면 먼저 해제 후 새로 연결
+      // 기존 직원 레코드에 연결
       if (member.member_type === "직원") {
         await supabase.from("employees").update({ profile_id: null }).eq("profile_id", member.id);
       }
       const { error: empErr } = await supabase.from("employees").update({ profile_id: member.id }).eq("id", linkedEmpId);
       if (empErr) { setErr(empErr.message); setSaving(false); return; }
+    } else if (memberType === "직원" && !linkedEmpId && member.member_type !== "직원") {
+      // 직원 선택 없이 저장 → 직원 현황에 자동 등록 + 연결
+      const { error: createErr } = await supabase.from("employees").insert({
+        name: name.trim() || member.email?.split("@")[0] || "이름 없음",
+        phone: phone.trim() || null,
+        email: member.email || null,
+        profile_id: member.id,
+        employment_type: "정규직",
+        status: "재직",
+        pay_type: "월급",
+        ins_pension: false,
+        ins_health: false,
+        ins_employment: false,
+        ins_industrial: false,
+      });
+      if (createErr) { setErr(createErr.message); setSaving(false); return; }
     }
 
     await onSaved();
@@ -300,14 +316,16 @@ function EditModal({ member, onClose, onSaved }: { member: Row; onClose: () => v
             <div className="field">
               <label>연결 직원 (직원 현황)</label>
               <select className="input" value={linkedEmpId} onChange={(e) => setLinkedEmpId(e.target.value)}>
-                <option value="">— 선택 안 함 —</option>
+                <option value="">— 선택 안 함 (자동 등록) —</option>
                 {empList.map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.name}{e.position ? ` · ${e.position}` : ""}{e.department ? ` · ${e.department}` : ""}
                   </option>
                 ))}
               </select>
-              <p className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>직원 현황의 어느 직원과 이 계정을 연결할지 선택합니다. 연결 시 직원 본인이 "내 출근부"를 조회할 수 있습니다.</p>
+              <p className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>
+                기존 직원 레코드가 있으면 선택하고, 없으면 선택 안 함으로 저장하면 직원 현황에 자동 등록됩니다.
+              </p>
             </div>
           )}
 
