@@ -21,6 +21,8 @@ const ICONS: Record<string, ReactNode> = {
   apps: (<path d="M13 3L5 13h6l-1 8 8-10h-6z" />),
   inquiries: (<><path d="M4 5h16v12H8l-4 4z" /><path d="M9 10h6M9 13h4" /></>),
   usage: (<><path d="M3 3v18h18" /><path d="M7 14l4-4 3 3 5-6" /></>),
+  employees: (<><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="M5.5 17a3.5 3.5 0 0 1 7 0" /><path d="M15 9h4M15 13h3" /></>),
+  attendance: (<><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" /><path d="m9 15 2 2 4-4" /></>),
 };
 
 type Link3 = [key: string, label: string, href: string];
@@ -31,6 +33,10 @@ const NAV: [string, Link3[]][] = [
     ["members", "회원 관리", "/admin/members"],
     ["apps", "전기 신청 처리", "/admin/applications"],
     ["inquiries", "문의·민원", "/admin/inquiries"],
+  ]],
+  ["인사", [
+    ["employees", "직원 현황", "/admin/employees"],
+    ["attendance", "출근부", "/admin/attendance"],
   ]],
   ["데이터", [["usage", "요금·사용량", "/admin/usage"]]],
 ];

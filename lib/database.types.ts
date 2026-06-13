@@ -16,6 +16,9 @@ export type Json =
 
 export type MemberType = "개인" | "기업";
 export type UserRole = "member" | "admin" | "superadmin";
+export type EmploymentType = "정규직" | "계약직" | "일용직" | "파견";
+export type EmployeeStatus = "재직" | "휴직" | "퇴사";
+export type AttendanceStatus = "정상" | "지각" | "조퇴" | "결근" | "휴가" | "출장";
 
 export type Database = {
   public: {
@@ -53,6 +56,114 @@ export type Database = {
           avatar_url?: string | null;
           created_at?: string;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      employees: {
+        Row: {
+          id: string;
+          name: string;
+          position: string | null;
+          department: string | null;
+          phone: string | null;
+          email: string | null;
+          hire_date: string | null;
+          employment_type: EmploymentType;
+          status: EmployeeStatus;
+          memo: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          position?: string | null;
+          department?: string | null;
+          phone?: string | null;
+          email?: string | null;
+          hire_date?: string | null;
+          employment_type?: EmploymentType;
+          status?: EmployeeStatus;
+          memo?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          position?: string | null;
+          department?: string | null;
+          phone?: string | null;
+          email?: string | null;
+          hire_date?: string | null;
+          employment_type?: EmploymentType;
+          status?: EmployeeStatus;
+          memo?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      attendance: {
+        Row: {
+          id: string;
+          employee_id: string;
+          work_date: string;
+          check_in: string | null;
+          check_out: string | null;
+          status: AttendanceStatus;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          employee_id: string;
+          work_date: string;
+          check_in?: string | null;
+          check_out?: string | null;
+          status?: AttendanceStatus;
+          note?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          employee_id?: string;
+          work_date?: string;
+          check_in?: string | null;
+          check_out?: string | null;
+          status?: AttendanceStatus;
+          note?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      contracts: {
+        Row: {
+          id: string;
+          employee_id: string;
+          title: string;
+          file_path: string;
+          mime_type: string | null;
+          size_bytes: number | null;
+          uploaded_at: string;
+        };
+        Insert: {
+          id?: string;
+          employee_id: string;
+          title: string;
+          file_path: string;
+          mime_type?: string | null;
+          size_bytes?: number | null;
+          uploaded_at?: string;
+        };
+        Update: {
+          id?: string;
+          employee_id?: string;
+          title?: string;
+          file_path?: string;
+          mime_type?: string | null;
+          size_bytes?: number | null;
+          uploaded_at?: string;
         };
         Relationships: [];
       };
