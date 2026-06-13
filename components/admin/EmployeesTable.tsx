@@ -32,7 +32,7 @@ export const EMP_COLS =
   "id, name, position, department, phone, email, hire_date, employment_type, status, memo, photo_url, rrn_masked, salary, pay_type, ins_pension, ins_health, ins_employment, ins_industrial";
 const EMP_TYPES: EmploymentType[] = ["정규직", "계약직", "일용직", "파견"];
 const STATUSES: EmployeeStatus[] = ["재직", "휴직", "퇴사"];
-const PAY_TYPES: PayType[] = ["월급", "일급", "시급"];
+const PAY_TYPES: PayType[] = ["월급", "일급", "시급", "기타소득", "사업소득"];
 
 function won(n: number | null) { return n == null ? "—" : `${n.toLocaleString()}원`; }
 

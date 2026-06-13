@@ -11,6 +11,17 @@ export const INS_RATES = {
 
 export const WORKED_STATUSES: AttendanceStatus[] = ["정상", "지각", "조퇴", "출장"];
 
+// 기타소득: 소득세 8% + 지방소득세 0.8% = 8.8%
+// 사업소득: 소득세 3% + 지방소득세 0.3% = 3.3%
+export const FREELANCE_RATES: Partial<Record<PayType, { income: number; local: number }>> = {
+  "기타소득": { income: 0.08, local: 0.008 },
+  "사업소득": { income: 0.03, local: 0.003 },
+};
+
+export function isFreelance(pt: PayType): boolean {
+  return pt === "기타소득" || pt === "사업소득";
+}
+
 export type AttRec = {
   status: AttendanceStatus;
   check_in: string | null;
@@ -58,25 +69,36 @@ export function summarize(recs: AttRec[], scheduled: number, salary: number | nu
   if (salary) {
     if (payType === "월급") gross = scheduled > 0 ? Math.round((salary * credited) / scheduled) : 0;
     else if (payType === "일급") gross = worked * salary;
-    else gross = Math.round(workedHours * salary); // 시급
+    else if (payType === "시급") gross = Math.round(workedHours * salary);
+    else gross = salary; // 기타소득·사업소득: 기준액 그대로 (프로레이션 없음)
   }
   return { cnt, worked, credited, workedHours, gross };
 }
 
-/** 지급액·4대보험 가입여부·소득세로부터 공제 명세 계산. */
+/** 지급액·4대보험 가입여부·소득세로부터 공제 명세 계산.
+ *  기타소득·사업소득은 원천징수 단일 요율만 적용 (4대보험 없음). */
 export function deductions(opts: {
   gross: number;
   insPension: boolean;
   insHealth: boolean;
   insEmployment: boolean;
   incomeTax: number;
+  payType?: PayType;
 }) {
+  const pt = opts.payType;
+  if (pt === "기타소득" || pt === "사업소득") {
+    const r = FREELANCE_RATES[pt]!;
+    const incomeTax = Math.round(opts.gross * r.income);
+    const localTax = Math.round(opts.gross * r.local);
+    const total = incomeTax + localTax;
+    return { pension: 0, health: 0, care: 0, employment: 0, incomeTax, localTax, total, net: opts.gross - total };
+  }
   const pension = opts.insPension ? Math.round(opts.gross * INS_RATES.pension) : 0;
   const health = opts.insHealth ? Math.round(opts.gross * INS_RATES.health) : 0;
   const care = opts.insHealth ? Math.round(health * INS_RATES.care) : 0;
   const employment = opts.insEmployment ? Math.round(opts.gross * INS_RATES.employment) : 0;
   const incomeTax = Math.round(opts.incomeTax);
-  const localTax = Math.round(incomeTax * 0.1); // 지방소득세 = 소득세 10%
+  const localTax = Math.round(incomeTax * 0.1);
   const total = pension + health + care + employment + incomeTax + localTax;
   return { pension, health, care, employment, incomeTax, localTax, total, net: opts.gross - total };
 }

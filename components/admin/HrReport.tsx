@@ -7,6 +7,7 @@ import { EMP_COLS, type Employee } from "@/components/admin/EmployeesTable";
 import { summarize, weekdaysInMonth, won, ym, type AttRec } from "@/lib/payroll";
 
 type Att = AttRec & { employee_id: string };
+type PayEntry = { employee_id: string; base_salary: number };
 
 function Ins({ on, label }: { on: boolean; label: string }) {
   return <span style={{ fontSize: 11.5, color: on ? "var(--ink)" : "var(--line-2)", fontWeight: on ? 700 : 400 }}>{on ? "■" : "□"}{label}</span>;
@@ -16,6 +17,7 @@ export default function HrReport() {
   const [month, setMonth] = useState(ym.now());
   const [emps, setEmps] = useState<Employee[] | null>(null);
   const [att, setAtt] = useState<Att[]>([]);
+  const [entryMap, setEntryMap] = useState<Map<string, number>>(new Map());
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -23,12 +25,15 @@ export default function HrReport() {
     Promise.all([
       supabase.from("employees").select(EMP_COLS).order("name"),
       supabase.from("attendance").select("employee_id, status, check_in, check_out").gte("work_date", `${month}-01`).lt("work_date", ym.nextStart(month)),
-    ]).then(([e, a]) => {
+      supabase.from("payroll_entries").select("employee_id, base_salary").eq("year_month", month),
+    ]).then(([e, a, pe]) => {
       if (!active) return;
       if (e.error) { setErr(e.error.message); return; }
       if (a.error) { setErr(a.error.message); return; }
       setEmps((e.data as Employee[]) ?? []);
       setAtt((a.data as Att[]) ?? []);
+      const entries = (pe.data as PayEntry[]) ?? [];
+      setEntryMap(new Map(entries.map((x) => [x.employee_id, Number(x.base_salary)])));
     });
     return () => { active = false; };
   }, [month]);
@@ -41,7 +46,10 @@ export default function HrReport() {
   }, [att]);
 
   const loading = emps === null;
-  const rows = useMemo(() => (emps ?? []).map((e) => ({ e, s: summarize(byEmp.get(e.id) ?? [], scheduled, e.salary, e.pay_type) })), [emps, byEmp, scheduled]);
+  const rows = useMemo(() => (emps ?? []).map((e) => {
+    const salary = entryMap.has(e.id) ? entryMap.get(e.id)! : e.salary;
+    return { e, s: summarize(byEmp.get(e.id) ?? [], scheduled, salary, e.pay_type), hasOverride: entryMap.has(e.id) };
+  }), [emps, byEmp, scheduled, entryMap]);
   const totalPay = useMemo(() => rows.reduce((s, r) => s + r.s.gross, 0), [rows]);
 
   function exportCsv() {
@@ -110,7 +118,7 @@ export default function HrReport() {
           <tbody>
             {loading && <tr><td colSpan={8} className="cellsub" style={{ textAlign: "center", padding: 28 }}>불러오는 중…</td></tr>}
             {!loading && rows.length === 0 && <tr><td colSpan={8} className="cellsub" style={{ textAlign: "center", padding: 28 }}>등록된 직원이 없습니다.</td></tr>}
-            {!loading && rows.map(({ e, s }) => (
+            {!loading && rows.map(({ e, s, hasOverride }) => (
               <tr key={e.id}>
                 <td>
                   <span style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--ink)", color: "var(--paper)", fontWeight: 800, fontSize: 14 }}>
@@ -124,7 +132,11 @@ export default function HrReport() {
                 <td className="cellsub">{e.department || "—"}</td>
                 <td>{e.status === "재직" ? <span className="badge ok dotok">재직</span> : e.status === "휴직" ? <span className="badge warn dotwarn">휴직</span> : <span className="badge off">퇴사</span>}</td>
                 <td><span className="flex gap-s wrap" style={{ gap: 8 }}><Ins on={e.ins_pension} label="연금" /><Ins on={e.ins_health} label="건강" /><Ins on={e.ins_employment} label="고용" /><Ins on={e.ins_industrial} label="산재" /></span></td>
-                <td className="cellsub">{won(e.salary)}<div style={{ fontSize: 11, opacity: 0.7 }}>{e.pay_type}</div></td>
+                <td className="cellsub">
+                  {won(hasOverride ? entryMap.get(e.id)! : e.salary)}
+                  {hasOverride && <span style={{ fontSize: 10, background: "var(--ink)", color: "var(--paper)", padding: "1px 4px", borderRadius: 3, marginLeft: 4 }}>월별</span>}
+                  <div style={{ fontSize: 11, opacity: 0.7 }}>{e.pay_type}</div>
+                </td>
                 <td className="cellsub" style={{ fontSize: 12.5 }}>
                   근무 {s.worked} · 지각 {s.cnt.지각} · 결근 <b style={{ color: s.cnt.결근 ? "#b3261e" : "inherit" }}>{s.cnt.결근}</b> · 휴가 {s.cnt.휴가}
                   {e.pay_type === "시급" && <div style={{ opacity: 0.7 }}>총 {s.workedHours.toFixed(1)}h</div>}

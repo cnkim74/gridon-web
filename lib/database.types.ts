@@ -18,7 +18,7 @@ export type MemberType = "개인" | "기업";
 export type UserRole = "member" | "admin" | "superadmin";
 export type EmploymentType = "정규직" | "계약직" | "일용직" | "파견";
 export type EmployeeStatus = "재직" | "휴직" | "퇴사";
-export type PayType = "월급" | "일급" | "시급";
+export type PayType = "월급" | "일급" | "시급" | "기타소득" | "사업소득";
 export type AttendanceStatus = "정상" | "지각" | "조퇴" | "결근" | "휴가" | "출장";
 
 export type Database = {
@@ -157,6 +157,36 @@ export type Database = {
           status?: AttendanceStatus;
           note?: string | null;
           created_at?: string;
+        };
+        Relationships: [];
+      };
+      payroll_entries: {
+        Row: {
+          id: string;
+          employee_id: string;
+          year_month: string;
+          base_salary: number;
+          note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          employee_id: string;
+          year_month: string;
+          base_salary: number;
+          note?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          employee_id?: string;
+          year_month?: string;
+          base_salary?: number;
+          note?: string | null;
+          created_at?: string;
+          updated_at?: string;
         };
         Relationships: [];
       };

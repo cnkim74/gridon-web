@@ -31,6 +31,7 @@ export default function EmployeeDetail() {
   const [rrn, setRrn] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [monthSalary, setMonthSalary] = useState<number | null>(null);
 
   // 직원 + 계약서
   useEffect(() => {
@@ -49,19 +50,23 @@ export default function EmployeeDetail() {
     return () => { active = false; };
   }, [id]);
 
-  // 선택월 근태
+  // 선택월 근태 + 월별 급여 override
   useEffect(() => {
     let active = true;
     if (!id) return;
-    supabase.from("attendance").select("status, check_in, check_out").eq("employee_id", id).gte("work_date", `${month}-01`).lt("work_date", ym.nextStart(month)).then(({ data, error }) => {
+    Promise.all([
+      supabase.from("attendance").select("status, check_in, check_out").eq("employee_id", id).gte("work_date", `${month}-01`).lt("work_date", ym.nextStart(month)),
+      supabase.from("payroll_entries").select("base_salary").eq("employee_id", id).eq("year_month", month).maybeSingle(),
+    ]).then(([att, entry]) => {
       if (!active) return;
-      if (error) { setErr(error.message); return; }
-      setRecs((data as AttRec[]) ?? []);
+      if (att.error) { setErr(att.error.message); return; }
+      setRecs((att.data as AttRec[]) ?? []);
+      setMonthSalary(entry.data?.base_salary != null ? Number(entry.data.base_salary) : null);
     });
     return () => { active = false; };
   }, [id, month]);
 
-  const s = useMemo(() => summarize(recs, weekdaysInMonth(month), emp?.salary ?? null, emp?.pay_type ?? "월급"), [recs, month, emp]);
+  const s = useMemo(() => summarize(recs, weekdaysInMonth(month), monthSalary ?? emp?.salary ?? null, emp?.pay_type ?? "월급"), [recs, month, emp, monthSalary]);
 
   async function revealRrn() {
     if (!id) return;
@@ -151,7 +156,7 @@ export default function EmployeeDetail() {
             ))}
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", border: "1px solid var(--line-2)" }}>
-            <span className="muted" style={{ fontSize: 12.5 }}>소정근무일 {weekdaysInMonth(month)}일 · 인정일 {s.credited}일 (공제 전 추정)</span>
+            <span className="muted" style={{ fontSize: 12.5 }}>소정근무일 {weekdaysInMonth(month)}일 · 인정일 {s.credited}일 (공제 전 추정){monthSalary != null ? <> · <span style={{ background: "var(--ink)", color: "var(--paper)", fontSize: 10, padding: "1px 5px", borderRadius: 3 }}>월별급여</span></> : ""}</span>
             <span style={{ fontWeight: 800, fontSize: 18 }}>{won(s.gross)}</span>
           </div>
 
