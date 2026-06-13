@@ -18,6 +18,7 @@ export type MemberType = "개인" | "기업";
 export type UserRole = "member" | "admin" | "superadmin";
 export type EmploymentType = "정규직" | "계약직" | "일용직" | "파견";
 export type EmployeeStatus = "재직" | "휴직" | "퇴사";
+export type PayType = "월급" | "일급" | "시급";
 export type AttendanceStatus = "정상" | "지각" | "조퇴" | "결근" | "휴가" | "출장";
 
 export type Database = {
@@ -71,6 +72,14 @@ export type Database = {
           employment_type: EmploymentType;
           status: EmployeeStatus;
           memo: string | null;
+          photo_url: string | null;
+          rrn_masked: string | null;
+          salary: number | null;
+          pay_type: PayType;
+          ins_pension: boolean;
+          ins_health: boolean;
+          ins_employment: boolean;
+          ins_industrial: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -85,6 +94,13 @@ export type Database = {
           employment_type?: EmploymentType;
           status?: EmployeeStatus;
           memo?: string | null;
+          photo_url?: string | null;
+          salary?: number | null;
+          pay_type?: PayType;
+          ins_pension?: boolean;
+          ins_health?: boolean;
+          ins_employment?: boolean;
+          ins_industrial?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -99,6 +115,13 @@ export type Database = {
           employment_type?: EmploymentType;
           status?: EmployeeStatus;
           memo?: string | null;
+          photo_url?: string | null;
+          salary?: number | null;
+          pay_type?: PayType;
+          ins_pension?: boolean;
+          ins_health?: boolean;
+          ins_employment?: boolean;
+          ins_industrial?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -169,7 +192,11 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      is_admin: { Args: Record<string, never>; Returns: boolean };
+      get_employee_rrn: { Args: { p_emp: string }; Returns: string | null };
+      save_employee_rrn: { Args: { p_emp: string; p_rrn: string }; Returns: undefined };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
