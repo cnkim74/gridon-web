@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { EMP_COLS, type Employee } from "@/components/admin/EmployeesTable";
 import { summarize, weekdaysInMonth, won, ym, type AttRec } from "@/lib/payroll";
@@ -119,7 +120,7 @@ export default function HrReport() {
                       : e.name.slice(0, 1)}
                   </span>
                 </td>
-                <td className="strong">{e.name}<div className="cellsub" style={{ fontWeight: 400 }}>{e.position || "—"} · {e.employment_type}</div></td>
+                <td className="strong"><Link href={`/admin/employee/?id=${e.id}`} style={{ color: "var(--ink)" }}>{e.name}</Link><div className="cellsub" style={{ fontWeight: 400 }}>{e.position || "—"} · {e.employment_type}</div></td>
                 <td className="cellsub">{e.department || "—"}</td>
                 <td>{e.status === "재직" ? <span className="badge ok dotok">재직</span> : e.status === "휴직" ? <span className="badge warn dotwarn">휴직</span> : <span className="badge off">퇴사</span>}</td>
                 <td><span className="flex gap-s wrap" style={{ gap: 8 }}><Ins on={e.ins_pension} label="연금" /><Ins on={e.ins_health} label="건강" /><Ins on={e.ins_employment} label="고용" /><Ins on={e.ins_industrial} label="산재" /></span></td>

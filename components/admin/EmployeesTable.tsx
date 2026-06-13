@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import SegFilter from "@/components/SegFilter";
 import ModalShell from "@/components/admin/ModalShell";
 import { supabase } from "@/lib/supabase";
@@ -151,7 +152,7 @@ export default function EmployeesTable() {
             {!loading && !error && filtered.length === 0 && <tr><td colSpan={7} className="cellsub" style={{ textAlign: "center", padding: 28 }}>등록된 직원이 없습니다. “직원 등록”으로 추가하세요.</td></tr>}
             {!loading && !error && filtered.map((r) => (
               <tr key={r.id}>
-                <td><span className="flex aic gap-s"><Photo url={r.photo_url} name={r.name} /><span className="strong">{r.name}</span></span></td>
+                <td><Link href={`/admin/employee/?id=${r.id}`} className="flex aic gap-s" style={{ textDecoration: "none", color: "var(--ink)" }}><Photo url={r.photo_url} name={r.name} /><span className="strong" style={{ borderBottom: "1px solid var(--line-2)" }}>{r.name}</span></Link></td>
                 <td>{r.position || "—"}</td>
                 <td>{r.department || "—"}</td>
                 <td className="cellsub">{r.hire_date || "—"}</td>
