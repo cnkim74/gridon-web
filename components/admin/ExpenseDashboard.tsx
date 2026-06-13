@@ -275,18 +275,19 @@ function mapCat(raw: string): string {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseGridonRows(wb: XLSX.WorkBook): any[][] {
-  // 1) 전체내역 시트 우선
-  const allWs = wb.Sheets["📋 전체내역"];
-  if (allWs) {
+  // 1) "전체내역" 포함 시트 우선 (이모지 인코딩 차이 방지용 .includes 사용)
+  const allSheetName = wb.SheetNames.find((n) => n.includes("전체내역"));
+  if (allSheetName) {
+    const allWs = wb.Sheets[allSheetName];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const raw = XLSX.utils.sheet_to_json<any[]>(allWs, { header: 1, defval: "" });
     const hi = raw.findIndex((r) => Array.isArray(r) && r.some((c) => String(c) === "일자" || String(c) === "지사"));
     if (hi >= 0) {
-      return [raw[hi], ...raw.slice(hi + 1).filter((r) => r[2] && String(r[2]).trim() !== "")];
+      return [raw[hi], ...raw.slice(hi + 1).filter((r) => r[2] !== "" && r[2] !== undefined && r[2] !== null)];
     }
   }
   // 2) 지사별 시트를 합침 (대시보드·전체내역 제외)
-  const branches = wb.SheetNames.filter((n) => !n.includes("대시보드") && !n.includes("📋") && !n.includes("📊"));
+  const branches = wb.SheetNames.filter((n) => !n.includes("대시보드") && !n.includes("전체내역") && n.includes("_"));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const combined: any[][] = [];
   let headerSet = false;
@@ -304,7 +305,7 @@ function parseGridonRows(wb: XLSX.WorkBook): any[][] {
     const branch = name.split("_")[0];
     const month = name.split("_")[1] ?? "";
     raw.slice(hi + 1)
-      .filter((r) => r[0] && String(r[0]).trim() !== "")
+      .filter((r) => r[0] !== "" && r[0] !== undefined)
       .forEach((r) => combined.push([branch, month, ...r]));
   }
   return combined;
@@ -322,11 +323,12 @@ function ExcelImporter({ onImport, onClose }: { onImport: () => void; onClose: (
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const wb = XLSX.read(e.target?.result, { type: "binary", cellDates: true });
+        // ArrayBuffer 방식 — 모든 브라우저에서 안정적
+        const wb = XLSX.read(new Uint8Array(e.target?.result as ArrayBuffer), { type: "array", cellDates: true });
 
-        // 그리드온 양식 감지: '📋 전체내역' 시트 있거나 시트명에 지사명 포함
+        // 그리드온 양식 감지: "전체내역" 시트 있거나 시트명에 지사·연월 포함
         const isGridon =
-          wb.SheetNames.includes("📋 전체내역") ||
+          wb.SheetNames.some((n) => n.includes("전체내역")) ||
           wb.SheetNames.some((n) => n.includes("지사") || n.includes("_202"));
 
         if (isGridon) {
@@ -345,11 +347,11 @@ function ExcelImporter({ onImport, onClose }: { onImport: () => void; onClose: (
         setRows(XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" }));
         setFormat("template");
         setErr(null);
-      } catch {
-        setErr("파일을 읽을 수 없습니다.");
+      } catch (ex) {
+        setErr(`파일을 읽을 수 없습니다. (${ex instanceof Error ? ex.message : String(ex)})`);
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   }
 
   function downloadTemplate() {
