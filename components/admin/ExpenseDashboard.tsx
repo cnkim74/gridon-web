@@ -532,6 +532,7 @@ export default function ExpenseDashboard() {
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
   const [catFilter, setCatFilter] = useState("전체");
   const [branchFilter, setBranchFilter] = useState("전체");
+  const [payFilter, setPayFilter] = useState("전체");
   const [search, setSearch] = useState("");
   const [rev, setRev] = useState(0);
 
@@ -581,6 +582,7 @@ export default function ExpenseDashboard() {
   const listExpenses = viewExpenses.filter((e) => {
     if (branchFilter !== "전체" && e.branch !== branchFilter) return false;
     if (catFilter !== "전체" && e.category !== catFilter) return false;
+    if (payFilter !== "전체" && e.payment_method !== payFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       return (e.vendor ?? "").toLowerCase().includes(q) || (e.description ?? "").toLowerCase().includes(q);
@@ -703,6 +705,11 @@ export default function ExpenseDashboard() {
               {/* 카테고리 필터 */}
               {["전체", ...CATS.filter((c) => viewExpenses.some((e) => e.category === c))].map((c) => (
                 <button key={c} type="button" style={chipStyle(catFilter === c)} onClick={() => setCatFilter(c)}>{c}</button>
+              ))}
+              <span style={{ width: 1, height: 22, background: "var(--line-2)", margin: "0 4px", alignSelf: "center" }} />
+              {/* 결재수단 필터 */}
+              {["전체", ...PAYS.filter((p) => viewExpenses.some((e) => e.payment_method === p))].map((p) => (
+                <button key={p} type="button" style={chipStyle(payFilter === p)} onClick={() => setPayFilter(p)}>{p}</button>
               ))}
             </div>
             <div className="search-mini">
