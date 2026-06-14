@@ -41,7 +41,7 @@ type Draft = {
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const CATS = ["공사 자재·장비", "식비·접대", "교통·운반", "차량 용품", "숙박비", "사무용품", "통신비", "공과금", "임차료", "인건비", "개인 용품", "기타"];
+const CATS = ["공사 자재·장비", "식비·접대", "교통·운반", "차량 용품", "숙박비", "사무용품", "통신비", "공과금", "임차료", "인건비", "개인 용품", "지급예정", "기타"];
 const PAYS = ["법인카드", "현금", "계좌이체", "기타"];
 const MONTHS = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
 
@@ -442,7 +442,7 @@ function ExcelImporter({ onImport, onClose }: { onImport: () => void; onClose: (
           category: mapCat(String(r[12] ?? "")),
           vendor: String(r[4] ?? "").trim() || null,
           description: desc || null,
-          payment_method: "기타",
+          payment_method: "법인카드",
           branch: String(r[0] ?? "").trim() || null,
           source: "excel",
           created_by: user?.id ?? null,
