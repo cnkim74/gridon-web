@@ -45,10 +45,17 @@ function StatusBadge({ status, onClick }: { status: Status; onClick?: () => void
 
 // ── Photo cell ─────────────────────────────────────────────────────────────
 
+function isImageUrl(url: string) {
+  const u = url.toLowerCase().split("?")[0];
+  return /\.(jpg|jpeg|png|gif|webp|heic)$/.test(u) || url.includes("/storage/v1/object/public/");
+}
+
 function PhotoCell({ workId, url, onUploaded }: { workId: string; url: string | null; onUploaded: (url: string) => void }) {
   const { user } = useAuth();
-  const ref = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [urlMode, setUrlMode] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
 
   async function upload(file: File) {
     setUploading(true);
@@ -63,16 +70,50 @@ function PhotoCell({ workId, url, onUploaded }: { workId: string; url: string | 
     setUploading(false);
   }
 
+  async function saveUrl() {
+    const trimmed = urlInput.trim();
+    if (!trimmed) return;
+    await sba.from("manhole_works").update({ photo_url: trimmed }).eq("id", workId);
+    onUploaded(trimmed);
+    setUrlMode(false);
+    setUrlInput("");
+  }
+
+  if (urlMode) {
+    return (
+      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+        <input
+          autoFocus
+          value={urlInput}
+          onChange={(e) => setUrlInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") saveUrl(); if (e.key === "Escape") setUrlMode(false); }}
+          placeholder="https://..."
+          style={{ fontSize: 11, border: "1px solid var(--line)", borderRadius: 4, padding: "3px 6px", width: 140, background: "var(--paper)" }}
+        />
+        <button type="button" onClick={saveUrl} style={{ fontSize: 11, background: "var(--ink)", color: "var(--paper)", border: "none", borderRadius: 4, padding: "3px 7px", cursor: "pointer" }}>저장</button>
+        <button type="button" onClick={() => setUrlMode(false)} style={{ fontSize: 11, background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }}>✕</button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
       {url ? (
-        <a href={url} target="_blank" rel="noreferrer">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={url} alt="현장" style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 4, border: "1px solid var(--line)", cursor: "pointer" }} />
-        </a>
+        isImageUrl(url) ? (
+          <a href={url} target="_blank" rel="noreferrer">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={url} alt="현장" style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 4, border: "1px solid var(--line)", cursor: "pointer" }} />
+          </a>
+        ) : (
+          <a href={url} target="_blank" rel="noreferrer"
+            style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--ink)", textDecoration: "none", border: "1px solid var(--line-2)", borderRadius: 6, padding: "3px 8px", whiteSpace: "nowrap", maxWidth: 100, overflow: "hidden" }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
+            링크
+          </a>
+        )
       ) : (
         <div style={{ width: 36, height: 36, borderRadius: 4, border: "1.5px dashed var(--line-2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-          onClick={() => ref.current?.click()}>
+          onClick={() => fileRef.current?.click()}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" style={{ opacity: .4 }}>
             <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" /><path d="M21 15l-5-5L5 21" />
           </svg>
@@ -81,12 +122,18 @@ function PhotoCell({ workId, url, onUploaded }: { workId: string; url: string | 
       {uploading ? (
         <span style={{ fontSize: 11, color: "var(--muted)" }}>업로드…</span>
       ) : (
-        <button type="button" onClick={() => ref.current?.click()}
-          style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0 }}>
-          {url ? "변경" : "등록"}
-        </button>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <button type="button" onClick={() => fileRef.current?.click()}
+            style={{ fontSize: 10, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0, textAlign: "left" }}>
+            {url ? "사진변경" : "사진"}
+          </button>
+          <button type="button" onClick={() => { setUrlMode(true); setUrlInput(url ?? ""); }}
+            style={{ fontSize: 10, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0, textAlign: "left" }}>
+            {url && !isImageUrl(url) ? "링크변경" : "링크입력"}
+          </button>
+        </div>
       )}
-      <input ref={ref} type="file" accept="image/*"
+      <input ref={fileRef} type="file" accept="image/*"
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         capture="environment"
