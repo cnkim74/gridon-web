@@ -245,7 +245,15 @@ function Importer({ branch, onImport, onClose }: { branch: string; onImport: () 
 
 // ── Main dashboard ─────────────────────────────────────────────────────────
 
+const BRANCH_LABELS: Record<string, string> = {
+  gyeongnam: "경남지사",
+  "west-busan": "서부산지사",
+  "east-busan": "동부산지사",
+  daegu: "대구지사",
+};
+
 export default function ManholeDashboard({ branch, branchLabel }: { branch: string; branchLabel: string }) {
+  const label = branchLabel || BRANCH_LABELS[branch] || branch;
   const [works, setWorks] = useState<Work[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -309,7 +317,7 @@ export default function ManholeDashboard({ branch, branchLabel }: { branch: stri
     <>
       <div className="apage-head">
         <div>
-          <h1>한전 맨홀 점검 · {branchLabel}</h1>
+          <h1>한전 맨홀 점검 · {label}</h1>
           <p>공사 리스트 현황 · 상태관리 · 현장사진 · 위치확인</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
