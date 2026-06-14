@@ -717,7 +717,7 @@ export default function ExpenseDashboard() {
             <tr>
               <th style={{ width: 90 }}>날짜</th>
               {branches.length > 0 && <th style={{ width: 90 }}>지사</th>}
-              <th style={{ width: 90 }}>분류</th>
+              <th style={{ width: 120 }}>분류</th>
               <th>거래처 · 내용</th>
               <th style={{ width: 80 }}>결제</th>
               <th style={{ width: 110, textAlign: "right" }}>공급가액</th>

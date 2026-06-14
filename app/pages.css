@@ -249,7 +249,7 @@
 .dtable .strong{font-weight:600}
 .cellsub{font-size:12.5px;color:var(--muted)}
 
-.badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.04em;padding:4px 9px;border:1px solid var(--line-2);border-radius:100px;text-transform:uppercase}
+.badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.04em;padding:4px 9px;border:1px solid var(--line-2);border-radius:100px;text-transform:uppercase;white-space:nowrap}
 .badge.ok{border-color:rgba(31,122,61,.4);color:#1f7a3d}
 .badge.warn{border-color:rgba(162,110,30,.45);color:#9a6a1e}
 .badge.off{color:var(--soft)}
