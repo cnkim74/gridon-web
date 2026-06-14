@@ -715,7 +715,7 @@ export default function ExpenseDashboard() {
         <table className="dtable">
           <thead>
             <tr>
-              <th style={{ width: 90 }}>날짜</th>
+              <th style={{ width: 110 }}>날짜</th>
               {branches.length > 0 && <th style={{ width: 90 }}>지사</th>}
               <th style={{ width: 120 }}>분류</th>
               <th>거래처 · 내용</th>
@@ -736,7 +736,7 @@ export default function ExpenseDashboard() {
               const supply = e.amount - (e.vat_amount ?? 0);
               return (
                 <tr key={e.id}>
-                  <td style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>{e.tx_date}</td>
+                  <td style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", whiteSpace: "nowrap" }}>{e.tx_date}</td>
                   {branches.length > 0 && <td style={{ fontSize: 12 }}>{e.branch ?? "—"}</td>}
                   <td><span className="badge off" style={{ fontSize: 11 }}>{e.category}</span></td>
                   <td>
