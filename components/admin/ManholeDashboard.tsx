@@ -193,7 +193,6 @@ function Importer({ branch, onImport, onClose }: { branch: string; onImport: () 
         digital_number: String(r[3] ?? "").trim() || null,
         address: String(r[4] ?? "").trim(),
         status: "미착공",
-        created_by: user?.id ?? null,
       }));
 
     if (records.length === 0) { setErr("유효한 데이터가 없습니다. (주소 컬럼 확인 필요)"); setImporting(false); return; }
