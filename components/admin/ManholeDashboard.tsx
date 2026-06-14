@@ -144,6 +144,51 @@ function PhotoCell({ workId, url, onUploaded }: { workId: string; url: string | 
   );
 }
 
+// ── Nav button (길찾기) ────────────────────────────────────────────────────
+
+function NavBtn({ address }: { address: string }) {
+  const [open, setOpen] = useState(false);
+  const enc = encodeURIComponent(address);
+
+  return (
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--muted)", background: "none", border: "1px solid var(--line-2)", borderRadius: 6, padding: "3px 8px", whiteSpace: "nowrap", cursor: "pointer" }}
+      >
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M3 12h18M12 3l9 9-9 9" />
+        </svg>
+        길찾기
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 99 }} />
+          <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 100, background: "var(--paper)", border: "1px solid var(--line-2)", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,.15)", minWidth: 130, overflow: "hidden" }}>
+            <a
+              href={`tmap://search?name=${enc}`}
+              onClick={() => setOpen(false)}
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", fontSize: 13, color: "inherit", textDecoration: "none", borderBottom: "1px solid var(--line-2)" }}
+            >
+              <span style={{ fontSize: 16 }}>🗺</span> TMap
+            </a>
+            <a
+              href={`https://map.kakao.com/?target=car&q=${enc}`}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => setOpen(false)}
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", fontSize: 13, color: "inherit", textDecoration: "none" }}
+            >
+              <span style={{ fontSize: 16 }}>🟡</span> 카카오내비
+            </a>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Map button ─────────────────────────────────────────────────────────────
 
 function MapBtn({ address }: { address: string }) {
@@ -160,6 +205,66 @@ function MapBtn({ address }: { address: string }) {
       </svg>
       지도
     </a>
+  );
+}
+
+// ── Edit modal ─────────────────────────────────────────────────────────────
+
+function EditModal({ work, onSave, onClose }: { work: Work; onSave: (updated: Work) => void; onClose: () => void }) {
+  const [seq, setSeq] = useState(String(work.seq ?? ""));
+  const [line, setLine] = useState(work.line_name ?? "");
+  const [digital, setDigital] = useState(work.digital_number ?? "");
+  const [addr, setAddr] = useState(work.address);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save() {
+    if (!addr.trim()) { setErr("주소를 입력하세요."); return; }
+    setSaving(true);
+    const patch = {
+      seq: Number(seq) || null,
+      line_name: line.trim() || null,
+      digital_number: digital.trim() || null,
+      address: addr.trim(),
+      updated_at: new Date().toISOString(),
+    };
+    const { error }: SbaRes = await sba.from("manhole_works").update(patch).eq("id", work.id);
+    setSaving(false);
+    if (error) { setErr((error as { message: string }).message); return; }
+    onSave({ ...work, ...patch });
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--paper)", borderRadius: 8, padding: "28px 32px", width: "100%", maxWidth: 480, boxShadow: "0 24px 64px rgba(0,0,0,.3)" }}>
+        <h2 style={{ fontSize: 17, fontWeight: 800, marginBottom: 20 }}>공사 항목 편집</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div className="field">
+            <label>순번</label>
+            <input className="input" type="number" value={seq} onChange={(e) => setSeq(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>선로</label>
+            <input className="input" value={line} onChange={(e) => setLine(e.target.value)} />
+          </div>
+        </div>
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label>전산화번호</label>
+          <input className="input" value={digital} onChange={(e) => setDigital(e.target.value)} />
+        </div>
+        <div className="field" style={{ marginBottom: 20 }}>
+          <label>주소</label>
+          <input className="input" value={addr} onChange={(e) => setAddr(e.target.value)} />
+        </div>
+        {err && <p style={{ color: "#b3261e", fontSize: 13, marginBottom: 12 }}>{err}</p>}
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button className="btn btn--ghost btn--sm" type="button" onClick={onClose}>취소</button>
+          <button className="btn btn--sm" type="button" onClick={save} disabled={saving}>
+            {saving ? "저장 중…" : "저장"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -307,6 +412,7 @@ export default function ManholeDashboard({ branch, branchLabel }: { branch: stri
   const [statusFilter, setStatusFilter] = useState<Status | "전체">("전체");
   const [showImporter, setShowImporter] = useState(false);
   const [rev, setRev] = useState(0);
+  const [editWork, setEditWork] = useState<Work | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -432,19 +538,19 @@ export default function ManholeDashboard({ branch, branchLabel }: { branch: stri
                 <th style={{ width: 100 }}>선로</th>
                 <th style={{ width: 110 }}>전산화번호</th>
                 <th>주소</th>
-                <th style={{ width: 60, textAlign: "center" }}>지도</th>
+                <th style={{ width: 150, textAlign: "center" }}>내비·지도</th>
                 <th style={{ width: 90, textAlign: "center" }}>상태</th>
                 <th style={{ width: 110, textAlign: "center" }}>현장사진</th>
                 <th style={{ width: 140 }}>비고</th>
-                <th style={{ width: 44 }} />
+                <th style={{ width: 80 }} />
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={9} style={{ textAlign: "center", padding: "40px 0", color: "var(--muted)" }}>불러오는 중…</td></tr>
+                <tr><td colSpan={10} style={{ textAlign: "center", padding: "40px 0", color: "var(--muted)" }}>불러오는 중…</td></tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: "center", padding: "48px 0", color: "var(--muted)" }}>
+                  <td colSpan={10} style={{ textAlign: "center", padding: "48px 0", color: "var(--muted)" }}>
                     {total === 0 ? (
                       <div>
                         <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>공사 리스트가 없습니다</div>
@@ -460,7 +566,10 @@ export default function ManholeDashboard({ branch, branchLabel }: { branch: stri
                   <td style={{ fontSize: 12, fontFamily: "var(--font-mono)", whiteSpace: "nowrap", color: "var(--muted)" }}>{w.digital_number ?? "—"}</td>
                   <td style={{ fontSize: 13 }}>{w.address}</td>
                   <td style={{ textAlign: "center" }}>
-                    <MapBtn address={w.address} />
+                    <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
+                      <NavBtn address={w.address} />
+                      <MapBtn address={w.address} />
+                    </div>
                   </td>
                   <td style={{ textAlign: "center" }}>
                     <StatusBadge status={w.status} onClick={() => cycleStatus(w)} />
@@ -480,7 +589,10 @@ export default function ManholeDashboard({ branch, branchLabel }: { branch: stri
                     />
                   </td>
                   <td>
-                    <button type="button" onClick={() => deleteWork(w.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "#b3261e", padding: 0 }}>삭제</button>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <button type="button" onClick={() => setEditWork(w)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--muted)", padding: 0 }}>편집</button>
+                      <button type="button" onClick={() => deleteWork(w.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "#b3261e", padding: 0 }}>삭제</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -500,6 +612,14 @@ export default function ManholeDashboard({ branch, branchLabel }: { branch: stri
           branch={branch}
           onImport={() => { setShowImporter(false); setRev((r) => r + 1); }}
           onClose={() => setShowImporter(false)}
+        />
+      )}
+
+      {editWork && (
+        <EditModal
+          work={editWork}
+          onSave={(updated) => { updateLocal(updated.id, updated); setEditWork(null); }}
+          onClose={() => setEditWork(null)}
         />
       )}
     </>
