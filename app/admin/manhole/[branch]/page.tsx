@@ -11,7 +11,8 @@ export function generateStaticParams() {
   return Object.keys(BRANCH_MAP).map((branch) => ({ branch }));
 }
 
-export default function ManholeBranchPage({ params }: { params: { branch: string } }) {
-  const label = BRANCH_MAP[params.branch] ?? params.branch;
-  return <ManholeDashboard branch={params.branch} branchLabel={label} />;
+export default async function ManholeBranchPage({ params }: { params: Promise<{ branch: string }> }) {
+  const { branch } = await params;
+  const label = BRANCH_MAP[branch] ?? branch;
+  return <ManholeDashboard branch={branch} branchLabel={label} />;
 }
