@@ -152,16 +152,18 @@ function NavBtn({ address }: { address: string }) {
 
   return (
     <div style={{ position: "relative", display: "inline-block" }}>
-      <button
-        type="button"
+      <span
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen((v) => !v)}
-        style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--muted)", background: "none", border: "1px solid var(--line-2)", borderRadius: 6, padding: "3px 8px", whiteSpace: "nowrap", cursor: "pointer", fontFamily: "inherit", lineHeight: "normal" }}
+        onKeyDown={(e) => e.key === "Enter" && setOpen((v) => !v)}
+        style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--muted)", border: "1px solid var(--line-2)", borderRadius: 6, padding: "3px 8px", whiteSpace: "nowrap", cursor: "pointer" }}
       >
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M3 12h18M12 3l9 9-9 9" />
         </svg>
         길찾기
-      </button>
+      </span>
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 99 }} />
