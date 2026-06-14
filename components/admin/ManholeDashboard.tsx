@@ -409,7 +409,7 @@ export default function ManholeDashboard({ branch, branchLabel }: { branch: stri
               ) : filtered.map((w) => (
                 <tr key={w.id}>
                   <td style={{ textAlign: "center", color: "var(--muted)", fontSize: 12, fontFamily: "var(--font-mono)" }}>{w.seq ?? "—"}</td>
-                  <td style={{ fontSize: 13, fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>{w.line_name ?? "—"}</td>
+                  <td style={{ fontSize: 13, fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>{w.line_name?.replace(/\s+/g, "") ?? "—"}</td>
                   <td style={{ fontSize: 12, fontFamily: "var(--font-mono)", whiteSpace: "nowrap", color: "var(--muted)" }}>{w.digital_number ?? "—"}</td>
                   <td style={{ fontSize: 13 }}>{w.address}</td>
                   <td style={{ textAlign: "center" }}>
