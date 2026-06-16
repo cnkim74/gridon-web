@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { supabase } from "@/lib/supabase";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -77,6 +77,18 @@ function driveImg(id: string) {
   return `https://drive.google.com/thumbnail?id=${id}&sz=w1600`;
 }
 
+// 폴더 파일 목록 → 01~12 사진 매핑 (+예비/중복 개수)
+function buildPhotoMap(files: DriveFile[]): { map: Record<string, string>; extra: number } {
+  const map: Record<string, string> = {};
+  let extra = 0;
+  for (const f of files.filter(isImage)) {
+    const s = slotNumOf(f.name);
+    if (s && !map[s]) map[s] = driveImg(f.id);
+    else extra++;
+  }
+  return { map, extra };
+}
+
 // ── 사진대지 한 페이지 ────────────────────────────────────────────────────────
 
 function SajinPage({ project, lineName, slots, photoMap }: {
@@ -139,6 +151,12 @@ export default function PhotoReportDashboard() {
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [extraCount, setExtraCount] = useState(0);
 
+  // 전체 일괄 인쇄
+  const [mode, setMode] = useState<"single" | "all">("single");
+  const [allReports, setAllReports] = useState<{ line: Line; photoMap: Record<string, string> }[]>([]);
+  const [loadingAll, setLoadingAll] = useState(false);
+  const [allProgress, setAllProgress] = useState("");
+
   // 설정 로드 (Supabase) → 값이 있으면 선로 목록 자동 로드
   useEffect(() => {
     (async () => {
@@ -154,7 +172,6 @@ export default function PhotoReportDashboard() {
 
   const saveSettings = async () => {
     const rows = [
-      { key: K_API, value: apiKey.trim() },
       { key: K_FOLDER, value: folder.trim() },
       { key: K_PROJECT, value: project.trim() || DEFAULT_PROJECT },
     ];
@@ -191,19 +208,12 @@ export default function PhotoReportDashboard() {
     }
   }
 
-  // 선로 선택 → 사진 매핑
+  // 선로 선택 → 사진 매핑 (단일)
   async function openLine(line: Line) {
-    setSelected(line); setLoadingPhotos(true); setPhotoMap({}); setExtraCount(0); setErr(null);
+    setMode("single"); setSelected(line); setLoadingPhotos(true); setPhotoMap({}); setExtraCount(0); setErr(null);
     try {
       const files = await driveList(line.id, apiKey.trim());
-      const imgs = files.filter(isImage);
-      const map: Record<string, string> = {};
-      let extra = 0;
-      for (const f of imgs) {
-        const slot = slotNumOf(f.name);
-        if (slot && !map[slot]) map[slot] = driveImg(f.id);
-        else extra++; // 공N 등 예비/중복
-      }
+      const { map, extra } = buildPhotoMap(files);
       setPhotoMap(map);
       setExtraCount(extra);
     } catch (e) {
@@ -213,30 +223,51 @@ export default function PhotoReportDashboard() {
     }
   }
 
+  // 전체 선로 일괄 로드 → 미리보기/인쇄
+  async function loadAll() {
+    if (lines.length === 0 || !apiKey.trim()) return;
+    setErr(null); setLoadingAll(true); setMode("all"); setSelected(null); setAllReports([]);
+    const reports: { line: Line; photoMap: Record<string, string> }[] = [];
+    try {
+      for (let i = 0; i < lines.length; i++) {
+        setAllProgress(`${i + 1} / ${lines.length}`);
+        const files = await driveList(lines[i].id, apiKey.trim());
+        reports.push({ line: lines[i], photoMap: buildPhotoMap(files).map });
+      }
+      setAllReports(reports);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setLoadingAll(false); setAllProgress("");
+    }
+  }
+
   const matched = Object.keys(photoMap).length;
+  const canPrint = mode === "all" ? allReports.length > 0 : matched > 0;
 
   return (
     <>
       <div className="apage-head no-print">
         <div><h1>결과보고서 · 사진대지</h1><p>드라이브 폴더의 점검사진을 실시간으로 읽어 맨홀 사진대지 PDF 생성</p></div>
-        {selected && (
+        {lines.length > 0 && (
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn--ghost btn--sm" type="button" onClick={() => openLine(selected)}>새로고침</button>
-            <button className="btn btn--sm" type="button" onClick={() => window.print()} disabled={loadingPhotos || matched === 0}>🖨 인쇄 · PDF 저장</button>
+            <button className="btn btn--ghost btn--sm" type="button" onClick={loadAll} disabled={loadingAll}>
+              {loadingAll ? `불러오는 중 ${allProgress}` : `전체 ${lines.length}개 인쇄`}
+            </button>
+            {mode === "single" && selected && (
+              <button className="btn btn--ghost btn--sm" type="button" onClick={() => openLine(selected)}>새로고침</button>
+            )}
+            <button className="btn btn--sm" type="button" onClick={() => window.print()} disabled={loadingPhotos || loadingAll || !canPrint}>🖨 인쇄 · PDF 저장</button>
           </div>
         )}
       </div>
 
       {/* 설정 */}
-      <details className="panel no-print" style={{ marginBottom: 16 }} open={!apiKey || !folder}>
-        <summary style={{ cursor: "pointer", padding: "14px 20px", fontWeight: 700, fontSize: 14 }}>⚙ 드라이브 연동 설정 (API 키 · 폴더 링크)</summary>
+      <details className="panel no-print" style={{ marginBottom: 16 }} open={!folder}>
+        <summary style={{ cursor: "pointer", padding: "14px 20px", fontWeight: 700, fontSize: 14 }}>⚙ 폴더 설정</summary>
         <div className="panel-body" style={{ borderTop: "1px solid var(--line-2)", display: "grid", gap: 12 }}>
           <div className="field">
-            <label>Google Drive API 키</label>
-            <input className="input" type="password" placeholder="AIza..." value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
-          </div>
-          <div className="field">
-            <label>경남본부 폴더 링크 (또는 선로 폴더)</label>
+            <label>구글 드라이브 폴더 링크</label>
             <input className="input" placeholder="https://drive.google.com/drive/folders/..." value={folder} onChange={(e) => setFolder(e.target.value)} />
           </div>
           <div className="field">
@@ -244,13 +275,13 @@ export default function PhotoReportDashboard() {
             <input className="input" value={project} onChange={(e) => setProject(e.target.value)} />
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button className="btn btn--sm" type="button" onClick={saveSettings}>설정 저장</button>
+            <button className="btn btn--sm" type="button" onClick={saveSettings}>저장</button>
             <button className="btn btn--ghost btn--sm" type="button" onClick={() => loadLinesWith(apiKey, folder)}>선로 목록 불러오기</button>
             {savedOk && <span style={{ fontSize: 13, color: "#1f7a3d" }}>✓ 저장됨</span>}
           </div>
           <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, margin: 0 }}>
-            · API 키는 이 브라우저에만 저장됩니다(서버 전송 없음).<br />
-            · 드라이브에서 <strong>경남본부 폴더</strong>를 “링크가 있는 모든 사용자 · 뷰어”로 공개해야 합니다.<br />
+            · 경남본부(상위) 폴더 링크를 붙여넣으면 하위 선로 폴더가 자동으로 목록에 표시됩니다.<br />
+            · 드라이브에서 해당 폴더를 “링크가 있는 모든 사용자 · 뷰어”로 공개해야 합니다.<br />
             · 사진 파일명은 매뉴얼대로 <strong>01~12</strong>로 시작해야 자동 배치됩니다. (11번 열화상은 비워둠, 공N은 제외)
           </p>
         </div>
@@ -285,14 +316,16 @@ export default function PhotoReportDashboard() {
 
         {/* 미리보기 */}
         <div>
-          {!selected && lines.length === 0 && !loadingLines && (
+          {mode === "single" && !selected && lines.length === 0 && !loadingLines && (
             <div className="panel no-print" style={{ padding: "60px 20px", textAlign: "center", color: "var(--muted)" }}>
-              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>드라이브 연동을 먼저 설정하세요</div>
-              <div style={{ fontSize: 13 }}>위 ⚙ 설정에서 API 키와 폴더 링크를 입력하고 “선로 목록 불러오기”를 누르세요.</div>
+              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>폴더를 먼저 설정하세요</div>
+              <div style={{ fontSize: 13 }}>위 ⚙ 폴더 설정에서 드라이브 폴더 링크를 입력하고 “선로 목록 불러오기”를 누르세요.</div>
             </div>
           )}
           {loadingLines && <div className="panel no-print" style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>선로 목록 불러오는 중…</div>}
-          {selected && (
+
+          {/* 단일 선로 */}
+          {mode === "single" && selected && (
             <>
               <div className="no-print" style={{ marginBottom: 10, fontSize: 13, color: "var(--muted)" }}>
                 {loadingPhotos ? "사진 불러오는 중…" : (
@@ -309,6 +342,29 @@ export default function PhotoReportDashboard() {
                 <SajinPage project={project} lineName={selected.name === "(이 폴더)" ? "" : selected.name} slots={PAGE2} photoMap={photoMap} />
               </div>
             </>
+          )}
+
+          {/* 전체 일괄 */}
+          {mode === "all" && (
+            loadingAll ? (
+              <div className="panel no-print" style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>
+                전체 사진 불러오는 중… {allProgress}
+              </div>
+            ) : (
+              <>
+                <div className="no-print" style={{ marginBottom: 10, fontSize: 13, color: "var(--muted)" }}>
+                  전체 <strong style={{ color: "var(--ink)" }}>{allReports.length}개</strong> 선로 · {allReports.length * 2}페이지 · “🖨 인쇄·PDF 저장”을 누르면 한 번에 출력됩니다.
+                </div>
+                <div className="sd-print">
+                  {allReports.map((r) => (
+                    <Fragment key={r.line.id}>
+                      <SajinPage project={project} lineName={r.line.name === "(이 폴더)" ? "" : r.line.name} slots={PAGE1} photoMap={r.photoMap} />
+                      <SajinPage project={project} lineName={r.line.name === "(이 폴더)" ? "" : r.line.name} slots={PAGE2} photoMap={r.photoMap} />
+                    </Fragment>
+                  ))}
+                </div>
+              </>
+            )
           )}
         </div>
       </div>
