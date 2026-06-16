@@ -36,6 +36,7 @@ const ICONS: Record<string, ReactNode> = {
   gallery: (<><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" /><path d="M21 15l-5-5L5 21" /></>),
   manhole: (<><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2" /></>),
   equipment: (<><rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" /><path d="M12 12v3M9.5 13.5h5" /></>),
+  report: (<><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" /><rect x="8" y="12" width="3.5" height="3.5" rx=".4" /><rect x="12.5" y="12" width="3.5" height="3.5" rx=".4" /></>),
 };
 
 // ── Nav types ──────────────────────────────────────────────────────────────
@@ -68,6 +69,7 @@ const NAV: [string, NavEntry[]][] = [
         ["manhole-dg", "대구지사", "/admin/manhole/daegu"],
       ],
     },
+    ["report", "결과보고서 · 사진대지", "/admin/photo-report"],
     ["equipment", "장비 관리현황", "/admin/equipment"],
   ]],
   ["인사", [

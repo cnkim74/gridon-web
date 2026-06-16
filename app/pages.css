@@ -315,3 +315,24 @@
   .kpis{grid-template-columns:1fr}
   .tl-row{grid-template-columns:1fr;gap:8px}
 }
+
+/* ── 맨홀 점검 사진대지 (결과보고서) ─────────────────────────── */
+.sd-page{width:210mm;min-height:296mm;background:#fff;color:#000;margin:0 auto 18px;padding:12mm 11mm;box-sizing:border-box;border:1px solid var(--line-2);box-shadow:0 2px 14px rgba(0,0,0,.06)}
+.sd-title{text-align:center;font-size:21px;font-weight:800;letter-spacing:.45em;margin:2mm 0 9mm;padding-left:.45em}
+.sd-head{display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:3mm;padding:0 1px}
+.sd-grid{width:100%;border-collapse:collapse;table-layout:fixed}
+.sd-grid td{border:1px solid #000;width:50%}
+.sd-cell{height:72mm;text-align:center;vertical-align:middle;padding:0;overflow:hidden}
+.sd-cell img{width:100%;height:72mm;object-fit:contain;display:block}
+.sd-cap{height:8mm;text-align:center;font-size:12px;font-weight:700;background:#fff}
+.sd-empty{font-size:11px;color:#bbb}
+@media print{
+  @page{size:A4 portrait;margin:6mm}
+  html,body{background:#fff!important}
+  body *{visibility:hidden}
+  .sd-print, .sd-print *{visibility:visible}
+  .sd-print{position:absolute;left:0;top:0;width:100%}
+  .sd-page{margin:0;border:none;box-shadow:none;padding:4mm 6mm;page-break-after:always;min-height:auto}
+  .sd-page:last-child{page-break-after:auto}
+  .no-print{display:none!important}
+}
