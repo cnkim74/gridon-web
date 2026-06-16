@@ -91,104 +91,89 @@ function buildPhotoMap(files: DriveFile[]): { map: Record<string, string>; extra
   return { map, extras: extras.map((e) => e.url) };
 }
 
-// 공가조사표 전개도(십자형) 배치 — 9칸 중 모서리는 빈칸
-const CROSS: (Slot | null)[] = [
-  null, { no: "09", label: "No.3 (북)" }, null,
-  { no: "07", label: "No.1 (서)" }, { no: "02", label: "전경" }, { no: "08", label: "No.2 (동)" },
-  null, { no: "10", label: "No.4 (남)" }, null,
-];
+// 선로명 정규화 (공백 제거) — 폴더명 ↔ DB line_name 매칭용
+function normLine(s: string) {
+  return s.replace(/\s+/g, "").toLowerCase();
+}
 
-// ── 공가조사표 페이지 (헤더 + 전개도 + 기타사진) ─────────────────────────────
+// ── 지중설비별 공가조사 사진대지 (가로 A4, 2×4 그리드) ───────────────────────
 
-function GonggaPage({ lineName, photoMap, extras }: {
-  lineName: string; photoMap: Record<string, string>; extras: string[];
-}) {
-  const firstExtras = extras.slice(0, 3); // 첫 장에는 공1~공3
+function GgCell({ url, cap }: { url?: string; cap: string }) {
   return (
-    <div className="sd-page">
-      <div className="gg-htitle">지 중 설 비 별 공 가 조 사 표</div>
-      <table className="gg-htable">
-        <tbody>
-          <tr>
-            <th style={{ width: "12%" }}>사업소명</th>
-            <th style={{ width: "13%" }}>전산화번호</th>
-            <th style={{ width: "13%" }}>선로명</th>
-            <th style={{ width: "12%" }}>선로번호</th>
-            <th style={{ width: "8%" }}>회선수</th>
-            <th>비고</th>
-          </tr>
-          <tr>
-            <td></td><td></td><td>{lineName}</td><td></td><td></td><td></td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div className="gg-sec">맨홀 전개도</div>
-      <div className="gg-cross">
-        {CROSS.map((s, i) => {
-          if (!s) return <div key={i} className="gg-cell gg-blank" />;
-          return (
-            <div key={i} className="gg-cell">
-              {photoMap[s.no]
-                ? <img src={photoMap[s.no]} alt={s.label} loading="lazy" />
-                : <div className="gg-empty">　</div>}
-              <div className="gg-cap">{s.label}</div>
-            </div>
-          );
-        })}
-      </div>
-
-      {firstExtras.length > 0 && (
-        <>
-          <div className="gg-sec">기타</div>
-          <div className="gg-extra">
-            {firstExtras.map((url, i) => (
-              <div key={i} className="gg-cell">
-                <img src={url} alt={`공${i + 1}`} loading="lazy" />
-                <div className="gg-cap">공{i + 1}</div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+    <div className="gg-cell">
+      {url ? <img src={url} alt={cap} loading="lazy" /> : <div className="gg-empty">　</div>}
+      <div className="gg-cap">{cap}</div>
     </div>
   );
 }
 
-// 공가조사표 기타 추가장 (공4 이후) — 한 장에 9칸(3×3)
-function GonggaExtraPage({ urls, startIdx }: { urls: string[]; startIdx: number }) {
-  return (
-    <div className="sd-page">
-      <div className="gg-sec">기타 (계속)</div>
-      <div className="gg-extra">
-        {urls.map((url, i) => (
-          <div key={i} className="gg-cell">
-            <img src={url} alt={`공${startIdx + i + 1}`} loading="lazy" />
-            <div className="gg-cap">공{startIdx + i + 1}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// 한 선로 전체 출력: 공가조사표(+추가장) → 사진대지 2장
-function LineReport({ project, lineName, photoMap, extras }: {
-  project: string; lineName: string; photoMap: Record<string, string>; extras: string[];
-}) {
-  const name = lineName === "(이 폴더)" ? "" : lineName;
-  // 기타: 첫 3장은 공가조사표 본장, 나머지는 9장씩 추가장
-  const rest = extras.slice(3);
-  const extraPages: string[][] = [];
-  for (let i = 0; i < rest.length; i += 9) extraPages.push(rest.slice(i, i + 9));
+function GonggaHead({ lineName, digital }: { lineName: string; digital: string }) {
   return (
     <>
-      <GonggaPage lineName={name} photoMap={photoMap} extras={extras} />
-      {extraPages.map((urls, pi) => (
-        <GonggaExtraPage key={pi} urls={urls} startIdx={3 + pi * 9} />
-      ))}
-      <SajinPage project={project} lineName={name} slots={PAGE1} photoMap={photoMap} />
-      <SajinPage project={project} lineName={name} slots={PAGE2} photoMap={photoMap} />
+      <div className="gg-title doc-title">□ 지중설비별 공가조사 사진대지</div>
+      <div className="gg-head">
+        <span>○ 설비명 : <span className="v">{lineName}</span></span>
+        <span>○ 전산화번호 : <span className="v">{digital}</span></span>
+        <span>○ 설비종류 : <span className="v">　</span></span>
+      </div>
+    </>
+  );
+}
+
+// 본장: 헤더 + 전경/서/동/북 + 남/기타·기타·기타(공1~공3)
+function GonggaPage({ lineName, digital, photoMap, extras }: {
+  lineName: string; digital: string; photoMap: Record<string, string>; extras: string[];
+}) {
+  return (
+    <div className="gg-page doc-font">
+      <GonggaHead lineName={lineName} digital={digital} />
+      <div className="gg-grid">
+        <GgCell url={photoMap["02"]} cap="전경" />
+        <GgCell url={photoMap["07"]} cap="서" />
+        <GgCell url={photoMap["08"]} cap="동" />
+        <GgCell url={photoMap["09"]} cap="북" />
+        <GgCell url={photoMap["10"]} cap="남" />
+        <GgCell url={extras[0]} cap="기타" />
+        <GgCell url={extras[1]} cap="기타" />
+        <GgCell url={extras[2]} cap="기타" />
+      </div>
+    </div>
+  );
+}
+
+// 기타 추가장 (공4 이후) — 한 장에 8칸(2×4)
+function GonggaExtraPage({ lineName, digital, urls }: { lineName: string; digital: string; urls: string[] }) {
+  return (
+    <div className="gg-page gg-page--extra doc-font">
+      <GonggaHead lineName={lineName} digital={digital} />
+      <div className="gg-grid">
+        {urls.map((url, i) => <GgCell key={i} url={url} cap="기타" />)}
+      </div>
+    </div>
+  );
+}
+
+// 한 선로 전체 출력: 공가조사표(+추가장)[가로] / 사진대지 2장[세로]
+function LineReport({ project, lineName, digital, photoMap, extras }: {
+  project: string; lineName: string; digital: string; photoMap: Record<string, string>; extras: string[];
+}) {
+  const name = lineName === "(이 폴더)" ? "" : lineName;
+  // 기타: 첫 3장은 본장, 나머지는 8장씩 추가장
+  const rest = extras.slice(3);
+  const extraPages: string[][] = [];
+  for (let i = 0; i < rest.length; i += 8) extraPages.push(rest.slice(i, i + 8));
+  return (
+    <>
+      <div className="gongga-doc">
+        <GonggaPage lineName={name} digital={digital} photoMap={photoMap} extras={extras} />
+        {extraPages.map((urls, pi) => (
+          <GonggaExtraPage key={pi} lineName={name} digital={digital} urls={urls} />
+        ))}
+      </div>
+      <div className="sajin-doc">
+        <SajinPage project={project} lineName={name} slots={PAGE1} photoMap={photoMap} />
+        <SajinPage project={project} lineName={name} slots={PAGE2} photoMap={photoMap} />
+      </div>
     </>
   );
 }
@@ -200,8 +185,8 @@ function SajinPage({ project, lineName, slots, photoMap }: {
 }) {
   const rows = [slots.slice(0, 2), slots.slice(2, 4), slots.slice(4, 6)];
   return (
-    <div className="sd-page">
-      <div className="sd-title">맨 홀 점 검 사 진 대 지</div>
+    <div className="sd-page doc-font">
+      <div className="sd-title doc-title">맨 홀 점 검 사 진 대 지</div>
       <div className="sd-head">
         <span>공사명　{project}</span>
         <span>맨홀명　{lineName}</span>
@@ -261,7 +246,11 @@ export default function PhotoReportDashboard() {
   const [loadingAll, setLoadingAll] = useState(false);
   const [allProgress, setAllProgress] = useState("");
 
-  // 설정 로드 (Supabase) → 값이 있으면 선로 목록 자동 로드
+  // 전산화번호 맵 (정규화 선로명 → 전산화번호)
+  const [digitalMap, setDigitalMap] = useState<Record<string, string>>({});
+  const digitalOf = (lineName: string) => digitalMap[normLine(lineName)] ?? "";
+
+  // 설정 로드 (Supabase) → 값이 있으면 선로 목록 자동 로드 + 전산화번호 맵 로드
   useEffect(() => {
     (async () => {
       const { data }: SbaRes = await sba.from("app_settings").select("key,value");
@@ -271,8 +260,37 @@ export default function PhotoReportDashboard() {
       setApiKey(k); setFolder(f); setProject(p);
       if (k.trim() && f.trim()) loadLinesWith(k, f);
     })();
+    // 전산화번호 매핑 (manhole_works)
+    (async () => {
+      const { data }: SbaRes = await sba.from("manhole_works").select("line_name,digital_number");
+      const rows = (data as { line_name: string | null; digital_number: string | null }[]) ?? [];
+      const m: Record<string, string> = {};
+      for (const r of rows) {
+        if (r.line_name && r.digital_number && !m[normLine(r.line_name)]) {
+          m[normLine(r.line_name)] = r.digital_number;
+        }
+      }
+      setDigitalMap(m);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 문서별 따로 인쇄 (공가조사표=가로 / 사진대지=세로)
+  function doPrint(kind: "gongga" | "sajin") {
+    document.getElementById("print-page-style")?.remove();
+    const style = document.createElement("style");
+    style.id = "print-page-style";
+    style.textContent = `@page{size:A4 ${kind === "gongga" ? "landscape" : "portrait"};margin:8mm}`;
+    document.head.appendChild(style);
+    document.body.classList.add(`printing-${kind}`);
+    const cleanup = () => {
+      document.body.classList.remove("printing-gongga", "printing-sajin");
+      document.getElementById("print-page-style")?.remove();
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+    window.print();
+  }
 
   const saveSettings = async () => {
     const rows = [
@@ -362,7 +380,8 @@ export default function PhotoReportDashboard() {
             {mode === "single" && selected && (
               <button className="btn btn--ghost btn--sm" type="button" onClick={() => openLine(selected)}>새로고침</button>
             )}
-            <button className="btn btn--sm" type="button" onClick={() => window.print()} disabled={loadingPhotos || loadingAll || !canPrint}>🖨 인쇄 · PDF 저장</button>
+            <button className="btn btn--sm" type="button" onClick={() => doPrint("gongga")} disabled={loadingPhotos || loadingAll || !canPrint}>🖨 공가조사표(가로)</button>
+            <button className="btn btn--sm" type="button" onClick={() => doPrint("sajin")} disabled={loadingPhotos || loadingAll || !canPrint}>🖨 사진대지(세로)</button>
           </div>
         )}
       </div>
@@ -443,7 +462,7 @@ export default function PhotoReportDashboard() {
                 )}
               </div>
               <div className="sd-print">
-                <LineReport project={project} lineName={selected.name} photoMap={photoMap} extras={extras} />
+                <LineReport project={project} lineName={selected.name} digital={digitalOf(selected.name)} photoMap={photoMap} extras={extras} />
               </div>
             </>
           )}
@@ -462,7 +481,7 @@ export default function PhotoReportDashboard() {
                 <div className="sd-print">
                   {allReports.map((r) => (
                     <Fragment key={r.line.id}>
-                      <LineReport project={project} lineName={r.line.name} photoMap={r.photoMap} extras={r.extras} />
+                      <LineReport project={project} lineName={r.line.name} digital={digitalOf(r.line.name)} photoMap={r.photoMap} extras={r.extras} />
                     </Fragment>
                   ))}
                 </div>
