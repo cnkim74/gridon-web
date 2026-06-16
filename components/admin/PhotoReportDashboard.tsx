@@ -77,18 +77,26 @@ function driveImg(id: string) {
   return `https://drive.google.com/thumbnail?id=${id}&sz=w1600`;
 }
 
-// 폴더 파일 목록 → 01~12 사진 매핑 + 예비(공N 등) 목록
+// 파일명이 "공1","공2"처럼 공+숫자로 시작하면 그 번호, 아니면 null
+function gongNumOf(name: string): number | null {
+  const m = name.match(/^\s*공\s*0*(\d+)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// 폴더 파일 목록 → 01~12 사진 매핑 + 기타(공N) 목록
+// (01~12, 공N 외의 파일명은 임의 참고용이므로 불러오지 않음)
 function buildPhotoMap(files: DriveFile[]): { map: Record<string, string>; extras: string[] } {
   const map: Record<string, string> = {};
-  const extras: { name: string; url: string }[] = [];
+  const gongs: { n: number; url: string }[] = [];
   for (const f of files.filter(isImage)) {
     const s = slotNumOf(f.name);
-    if (s && !map[s]) map[s] = driveImg(f.id);
-    else extras.push({ name: f.name, url: driveImg(f.id) });
+    if (s) { if (!map[s]) map[s] = driveImg(f.id); continue; }
+    const g = gongNumOf(f.name);
+    if (g !== null) gongs.push({ n: g, url: driveImg(f.id) });
+    // 그 외 파일명은 무시
   }
-  // 예비사진은 파일명 자연정렬 후 URL만
-  extras.sort((a, b) => a.name.localeCompare(b.name, "ko", { numeric: true }));
-  return { map, extras: extras.map((e) => e.url) };
+  gongs.sort((a, b) => a.n - b.n);
+  return { map, extras: gongs.map((e) => e.url) };
 }
 
 // 선로명 정규화 (공백 제거) — 폴더명 ↔ DB line_name 매칭용
