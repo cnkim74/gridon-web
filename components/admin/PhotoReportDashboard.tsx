@@ -98,11 +98,11 @@ function normLine(s: string) {
 
 // ── 지중설비별 공가조사 사진대지 (가로 A4, 2×4 그리드) ───────────────────────
 
-function GgCell({ url, cap }: { url?: string; cap: string }) {
+function GgCell({ url, cap }: { url?: string; cap?: string }) {
   return (
     <div className="gg-cell">
-      {url ? <img src={url} alt={cap} loading="lazy" /> : <div className="gg-empty">　</div>}
-      <div className="gg-cap">{cap}</div>
+      {url ? <img src={url} alt={cap ?? ""} loading="lazy" /> : <div className="gg-empty">　</div>}
+      <div className="gg-cap">{cap ?? "　"}</div>
     </div>
   );
 }
@@ -141,13 +141,15 @@ function GonggaPage({ lineName, digital, photoMap, extras }: {
   );
 }
 
-// 기타 추가장 (공4 이후) — 한 장에 8칸(2×4)
+// 기타 추가장 (공4 이후) — 한 장에 8칸(2×4) 테두리 모두 표시, 이미지 있는 칸만 "기타"
 function GonggaExtraPage({ lineName, digital, urls }: { lineName: string; digital: string; urls: string[] }) {
   return (
     <div className="gg-page gg-page--extra doc-font">
       <GonggaHead lineName={lineName} digital={digital} />
       <div className="gg-grid">
-        {urls.map((url, i) => <GgCell key={i} url={url} cap="기타" />)}
+        {Array.from({ length: 8 }).map((_, i) => (
+          <GgCell key={i} url={urls[i]} cap={urls[i] ? "기타" : undefined} />
+        ))}
       </div>
     </div>
   );
