@@ -77,16 +77,120 @@ function driveImg(id: string) {
   return `https://drive.google.com/thumbnail?id=${id}&sz=w1600`;
 }
 
-// 폴더 파일 목록 → 01~12 사진 매핑 (+예비/중복 개수)
-function buildPhotoMap(files: DriveFile[]): { map: Record<string, string>; extra: number } {
+// 폴더 파일 목록 → 01~12 사진 매핑 + 예비(공N 등) 목록
+function buildPhotoMap(files: DriveFile[]): { map: Record<string, string>; extras: string[] } {
   const map: Record<string, string> = {};
-  let extra = 0;
+  const extras: { name: string; url: string }[] = [];
   for (const f of files.filter(isImage)) {
     const s = slotNumOf(f.name);
     if (s && !map[s]) map[s] = driveImg(f.id);
-    else extra++;
+    else extras.push({ name: f.name, url: driveImg(f.id) });
   }
-  return { map, extra };
+  // 예비사진은 파일명 자연정렬 후 URL만
+  extras.sort((a, b) => a.name.localeCompare(b.name, "ko", { numeric: true }));
+  return { map, extras: extras.map((e) => e.url) };
+}
+
+// 공가조사표 전개도(십자형) 배치 — 9칸 중 모서리는 빈칸
+const CROSS: (Slot | null)[] = [
+  null, { no: "09", label: "No.3 (북)" }, null,
+  { no: "07", label: "No.1 (서)" }, { no: "02", label: "전경" }, { no: "08", label: "No.2 (동)" },
+  null, { no: "10", label: "No.4 (남)" }, null,
+];
+
+// ── 공가조사표 페이지 (헤더 + 전개도 + 기타사진) ─────────────────────────────
+
+function GonggaPage({ lineName, photoMap, extras }: {
+  lineName: string; photoMap: Record<string, string>; extras: string[];
+}) {
+  const firstExtras = extras.slice(0, 3); // 첫 장에는 공1~공3
+  return (
+    <div className="sd-page">
+      <div className="gg-htitle">지 중 설 비 별 공 가 조 사 표</div>
+      <table className="gg-htable">
+        <tbody>
+          <tr>
+            <th style={{ width: "12%" }}>사업소명</th>
+            <th style={{ width: "13%" }}>전산화번호</th>
+            <th style={{ width: "13%" }}>선로명</th>
+            <th style={{ width: "12%" }}>선로번호</th>
+            <th style={{ width: "8%" }}>회선수</th>
+            <th>비고</th>
+          </tr>
+          <tr>
+            <td></td><td></td><td>{lineName}</td><td></td><td></td><td></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div className="gg-sec">맨홀 전개도</div>
+      <div className="gg-cross">
+        {CROSS.map((s, i) => {
+          if (!s) return <div key={i} className="gg-cell gg-blank" />;
+          return (
+            <div key={i} className="gg-cell">
+              {photoMap[s.no]
+                ? <img src={photoMap[s.no]} alt={s.label} loading="lazy" />
+                : <div className="gg-empty">　</div>}
+              <div className="gg-cap">{s.label}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {firstExtras.length > 0 && (
+        <>
+          <div className="gg-sec">기타</div>
+          <div className="gg-extra">
+            {firstExtras.map((url, i) => (
+              <div key={i} className="gg-cell">
+                <img src={url} alt={`공${i + 1}`} loading="lazy" />
+                <div className="gg-cap">공{i + 1}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// 공가조사표 기타 추가장 (공4 이후) — 한 장에 9칸(3×3)
+function GonggaExtraPage({ urls, startIdx }: { urls: string[]; startIdx: number }) {
+  return (
+    <div className="sd-page">
+      <div className="gg-sec">기타 (계속)</div>
+      <div className="gg-extra">
+        {urls.map((url, i) => (
+          <div key={i} className="gg-cell">
+            <img src={url} alt={`공${startIdx + i + 1}`} loading="lazy" />
+            <div className="gg-cap">공{startIdx + i + 1}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// 한 선로 전체 출력: 공가조사표(+추가장) → 사진대지 2장
+function LineReport({ project, lineName, photoMap, extras }: {
+  project: string; lineName: string; photoMap: Record<string, string>; extras: string[];
+}) {
+  const name = lineName === "(이 폴더)" ? "" : lineName;
+  // 기타: 첫 3장은 공가조사표 본장, 나머지는 9장씩 추가장
+  const rest = extras.slice(3);
+  const extraPages: string[][] = [];
+  for (let i = 0; i < rest.length; i += 9) extraPages.push(rest.slice(i, i + 9));
+  return (
+    <>
+      <GonggaPage lineName={name} photoMap={photoMap} extras={extras} />
+      {extraPages.map((urls, pi) => (
+        <GonggaExtraPage key={pi} urls={urls} startIdx={3 + pi * 9} />
+      ))}
+      <SajinPage project={project} lineName={name} slots={PAGE1} photoMap={photoMap} />
+      <SajinPage project={project} lineName={name} slots={PAGE2} photoMap={photoMap} />
+    </>
+  );
 }
 
 // ── 사진대지 한 페이지 ────────────────────────────────────────────────────────
@@ -148,12 +252,12 @@ export default function PhotoReportDashboard() {
 
   const [selected, setSelected] = useState<Line | null>(null);
   const [photoMap, setPhotoMap] = useState<Record<string, string>>({});
+  const [extras, setExtras] = useState<string[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
-  const [extraCount, setExtraCount] = useState(0);
 
   // 전체 일괄 인쇄
   const [mode, setMode] = useState<"single" | "all">("single");
-  const [allReports, setAllReports] = useState<{ line: Line; photoMap: Record<string, string> }[]>([]);
+  const [allReports, setAllReports] = useState<{ line: Line; photoMap: Record<string, string>; extras: string[] }[]>([]);
   const [loadingAll, setLoadingAll] = useState(false);
   const [allProgress, setAllProgress] = useState("");
 
@@ -210,12 +314,12 @@ export default function PhotoReportDashboard() {
 
   // 선로 선택 → 사진 매핑 (단일)
   async function openLine(line: Line) {
-    setMode("single"); setSelected(line); setLoadingPhotos(true); setPhotoMap({}); setExtraCount(0); setErr(null);
+    setMode("single"); setSelected(line); setLoadingPhotos(true); setPhotoMap({}); setExtras([]); setErr(null);
     try {
       const files = await driveList(line.id, apiKey.trim());
-      const { map, extra } = buildPhotoMap(files);
+      const { map, extras } = buildPhotoMap(files);
       setPhotoMap(map);
-      setExtraCount(extra);
+      setExtras(extras);
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -227,12 +331,13 @@ export default function PhotoReportDashboard() {
   async function loadAll() {
     if (lines.length === 0 || !apiKey.trim()) return;
     setErr(null); setLoadingAll(true); setMode("all"); setSelected(null); setAllReports([]);
-    const reports: { line: Line; photoMap: Record<string, string> }[] = [];
+    const reports: { line: Line; photoMap: Record<string, string>; extras: string[] }[] = [];
     try {
       for (let i = 0; i < lines.length; i++) {
         setAllProgress(`${i + 1} / ${lines.length}`);
         const files = await driveList(lines[i].id, apiKey.trim());
-        reports.push({ line: lines[i], photoMap: buildPhotoMap(files).map });
+        const { map, extras } = buildPhotoMap(files);
+        reports.push({ line: lines[i], photoMap: map, extras });
       }
       setAllReports(reports);
     } catch (e) {
@@ -248,7 +353,7 @@ export default function PhotoReportDashboard() {
   return (
     <>
       <div className="apage-head no-print">
-        <div><h1>결과보고서 · 사진대지</h1><p>드라이브 폴더의 점검사진을 실시간으로 읽어 맨홀 사진대지 PDF 생성</p></div>
+        <div><h1>지중설비별 공가조사표 · 맨홀점검사진대지</h1><p>드라이브 폴더의 점검사진을 실시간으로 읽어 선로별 공가조사표 + 사진대지 PDF 생성</p></div>
         {lines.length > 0 && (
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn--ghost btn--sm" type="button" onClick={loadAll} disabled={loadingAll}>
@@ -332,14 +437,13 @@ export default function PhotoReportDashboard() {
                   <>
                     <strong style={{ color: "var(--ink)" }}>{selected.name}</strong> · 매칭 {matched}/12장
                     {photoMap["11"] ? "" : " · 11번(열화상) 비움"}
-                    {extraCount > 0 ? ` · 예비/기타 ${extraCount}장 제외` : ""}
-                    {matched < 11 && matched > 0 ? " · 누락 칸은 빈칸 출력" : ""}
+                    {extras.length > 0 ? ` · 기타(공) ${extras.length}장` : ""}
+                    {" · 공가조사표 + 사진대지 2장"}
                   </>
                 )}
               </div>
               <div className="sd-print">
-                <SajinPage project={project} lineName={selected.name === "(이 폴더)" ? "" : selected.name} slots={PAGE1} photoMap={photoMap} />
-                <SajinPage project={project} lineName={selected.name === "(이 폴더)" ? "" : selected.name} slots={PAGE2} photoMap={photoMap} />
+                <LineReport project={project} lineName={selected.name} photoMap={photoMap} extras={extras} />
               </div>
             </>
           )}
@@ -353,13 +457,12 @@ export default function PhotoReportDashboard() {
             ) : (
               <>
                 <div className="no-print" style={{ marginBottom: 10, fontSize: 13, color: "var(--muted)" }}>
-                  전체 <strong style={{ color: "var(--ink)" }}>{allReports.length}개</strong> 선로 · {allReports.length * 2}페이지 · “🖨 인쇄·PDF 저장”을 누르면 한 번에 출력됩니다.
+                  전체 <strong style={{ color: "var(--ink)" }}>{allReports.length}개</strong> 선로 · “🖨 인쇄·PDF 저장”을 누르면 선로별 공가조사표 + 사진대지가 한 번에 출력됩니다.
                 </div>
                 <div className="sd-print">
                   {allReports.map((r) => (
                     <Fragment key={r.line.id}>
-                      <SajinPage project={project} lineName={r.line.name === "(이 폴더)" ? "" : r.line.name} slots={PAGE1} photoMap={r.photoMap} />
-                      <SajinPage project={project} lineName={r.line.name === "(이 폴더)" ? "" : r.line.name} slots={PAGE2} photoMap={r.photoMap} />
+                      <LineReport project={project} lineName={r.line.name} photoMap={r.photoMap} extras={r.extras} />
                     </Fragment>
                   ))}
                 </div>

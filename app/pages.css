@@ -336,3 +336,18 @@
   .sd-page:last-child{page-break-after:auto}
   .no-print{display:none!important}
 }
+
+/* ── 지중설비별 공가조사표 ───────────────────────────────────── */
+.gg-htitle{text-align:center;font-size:19px;font-weight:800;letter-spacing:.2em;margin:2mm 0 6mm}
+.gg-htable{width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:7mm}
+.gg-htable th,.gg-htable td{border:1px solid #000;padding:5px 6px;font-size:12px;text-align:center;height:9mm}
+.gg-htable th{background:#f4f4f4;font-weight:700}
+.gg-cross{display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:52mm;max-width:168mm;margin:0 auto}
+.gg-cell{border:1px solid #000;display:flex;flex-direction:column;overflow:hidden;background:#fff}
+.gg-cell.gg-blank{border:none;background:transparent}
+.gg-cell img{width:100%;flex:1;min-height:0;object-fit:contain;display:block}
+.gg-cap{text-align:center;font-size:11px;font-weight:700;border-top:1px solid #000;padding:1.4mm 0}
+.gg-empty{flex:1;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:11px}
+.gg-sec{font-weight:800;font-size:13px;margin:7mm 0 2.5mm;padding-left:3px;border-left:3px solid #000}
+.gg-extra{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm}
+.gg-extra .gg-cell{height:50mm}

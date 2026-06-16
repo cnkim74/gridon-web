@@ -69,7 +69,7 @@ const NAV: [string, NavEntry[]][] = [
         ["manhole-dg", "대구지사", "/admin/manhole/daegu"],
       ],
     },
-    ["report", "결과보고서 · 사진대지", "/admin/photo-report"],
+    ["report", "공가조사표 · 사진대지", "/admin/photo-report"],
     ["equipment", "장비 관리현황", "/admin/equipment"],
   ]],
   ["인사", [
