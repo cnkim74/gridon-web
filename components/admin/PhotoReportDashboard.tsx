@@ -1,5 +1,10 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const sba = supabase as any;
+type SbaRes = { data: unknown; error: { message: string } | null };
 
 // ── 점검 항목 매핑 (매뉴얼 2단계 표 + 사진대지 양식) ─────────────────────────
 // 번호 → 사진대지 라벨. 11번(열화상)은 현재 제외 → 빈칸 유지.
@@ -24,10 +29,10 @@ const PAGE2: Slot[] = [
 
 const DEFAULT_PROJECT = "2026년 경남본부 배전맨홀 점검공사(차도)";
 
-// localStorage 키
-const LS_KEY = "gridon_drive_apikey";
-const LS_FOLDER = "gridon_drive_folder";
-const LS_PROJECT = "gridon_report_project";
+// Supabase app_settings 키 (관리자 전용, 모든 기기에서 공유)
+const K_API = "drive_api_key";
+const K_FOLDER = "report_folder";
+const K_PROJECT = "report_project";
 
 // ── Drive 헬퍼 ───────────────────────────────────────────────────────────────
 
@@ -134,28 +139,38 @@ export default function PhotoReportDashboard() {
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [extraCount, setExtraCount] = useState(0);
 
-  // 설정 로드
+  // 설정 로드 (Supabase) → 값이 있으면 선로 목록 자동 로드
   useEffect(() => {
-    setApiKey(localStorage.getItem(LS_KEY) ?? "");
-    setFolder(localStorage.getItem(LS_FOLDER) ?? "");
-    setProject(localStorage.getItem(LS_PROJECT) ?? DEFAULT_PROJECT);
+    (async () => {
+      const { data }: SbaRes = await sba.from("app_settings").select("key,value");
+      const rows = (data as { key: string; value: string }[]) ?? [];
+      const get = (k: string) => rows.find((r) => r.key === k)?.value ?? "";
+      const k = get(K_API), f = get(K_FOLDER), p = get(K_PROJECT) || DEFAULT_PROJECT;
+      setApiKey(k); setFolder(f); setProject(p);
+      if (k.trim() && f.trim()) loadLinesWith(k, f);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const saveSettings = () => {
-    localStorage.setItem(LS_KEY, apiKey.trim());
-    localStorage.setItem(LS_FOLDER, folder.trim());
-    localStorage.setItem(LS_PROJECT, project.trim() || DEFAULT_PROJECT);
+  const saveSettings = async () => {
+    const rows = [
+      { key: K_API, value: apiKey.trim() },
+      { key: K_FOLDER, value: folder.trim() },
+      { key: K_PROJECT, value: project.trim() || DEFAULT_PROJECT },
+    ];
+    const { error }: SbaRes = await sba.from("app_settings").upsert(rows);
+    if (error) { setErr("설정 저장 실패: " + (error as { message: string }).message); return; }
     setSavedOk(true);
     setTimeout(() => setSavedOk(false), 1800);
   };
 
-  // 선로 목록 로드
-  const loadLines = useCallback(async () => {
-    if (!apiKey.trim() || !folder.trim()) { setErr("API 키와 폴더 링크를 먼저 입력·저장하세요."); return; }
+  // 선로 목록 로드 (key/folder를 인자로 받아 자동 로드에도 사용)
+  async function loadLinesWith(key: string, folderInput: string) {
+    if (!key.trim() || !folderInput.trim()) { setErr("API 키와 폴더 링크를 먼저 입력·저장하세요."); return; }
     setErr(null); setLoadingLines(true); setLines([]); setSelected(null); setPhotoMap({});
     try {
-      const fid = extractFolderId(folder);
-      const items = await driveList(fid, apiKey.trim());
+      const fid = extractFolderId(folderInput);
+      const items = await driveList(fid, key.trim());
       const subFolders = items.filter(isFolder);
       if (subFolders.length > 0) {
         // 상위(경남본부) 폴더 → 하위 선로 폴더 목록
@@ -174,7 +189,7 @@ export default function PhotoReportDashboard() {
     } finally {
       setLoadingLines(false);
     }
-  }, [apiKey, folder]);
+  }
 
   // 선로 선택 → 사진 매핑
   async function openLine(line: Line) {
@@ -230,7 +245,7 @@ export default function PhotoReportDashboard() {
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button className="btn btn--sm" type="button" onClick={saveSettings}>설정 저장</button>
-            <button className="btn btn--ghost btn--sm" type="button" onClick={loadLines}>선로 목록 불러오기</button>
+            <button className="btn btn--ghost btn--sm" type="button" onClick={() => loadLinesWith(apiKey, folder)}>선로 목록 불러오기</button>
             {savedOk && <span style={{ fontSize: 13, color: "#1f7a3d" }}>✓ 저장됨</span>}
           </div>
           <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, margin: 0 }}>
