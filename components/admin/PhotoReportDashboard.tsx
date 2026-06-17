@@ -163,28 +163,30 @@ function GonggaExtraPage({ lineName, digital, urls }: { lineName: string; digita
   );
 }
 
-// 한 선로 전체 출력: 공가조사표(+추가장)[가로] / 사진대지 2장[세로]
-function LineReport({ project, lineName, digital, photoMap, extras }: {
-  project: string; lineName: string; digital: string; photoMap: Record<string, string>; extras: string[];
+// 한 선로 출력: doc 종류에 따라 공가조사표(가로) 또는 사진대지(세로)만
+function LineReport({ doc, project, lineName, digital, photoMap, extras }: {
+  doc: "gongga" | "sajin"; project: string; lineName: string; digital: string; photoMap: Record<string, string>; extras: string[];
 }) {
   const name = lineName === "(이 폴더)" ? "" : lineName;
-  // 기타: 첫 3장은 본장, 나머지는 8장씩 추가장
-  const rest = extras.slice(3);
-  const extraPages: string[][] = [];
-  for (let i = 0; i < rest.length; i += 8) extraPages.push(rest.slice(i, i + 8));
-  return (
-    <>
+  if (doc === "gongga") {
+    // 기타: 첫 3장은 본장, 나머지는 8장씩 추가장
+    const rest = extras.slice(3);
+    const extraPages: string[][] = [];
+    for (let i = 0; i < rest.length; i += 8) extraPages.push(rest.slice(i, i + 8));
+    return (
       <div className="gongga-doc">
         <GonggaPage lineName={name} digital={digital} photoMap={photoMap} extras={extras} />
         {extraPages.map((urls, pi) => (
           <GonggaExtraPage key={pi} lineName={name} digital={digital} urls={urls} />
         ))}
       </div>
-      <div className="sajin-doc">
-        <SajinPage project={project} lineName={name} slots={PAGE1} photoMap={photoMap} />
-        <SajinPage project={project} lineName={name} slots={PAGE2} photoMap={photoMap} />
-      </div>
-    </>
+    );
+  }
+  return (
+    <div className="sajin-doc">
+      <SajinPage project={project} lineName={name} slots={PAGE1} photoMap={photoMap} />
+      <SajinPage project={project} lineName={name} slots={PAGE2} photoMap={photoMap} />
+    </div>
   );
 }
 
@@ -235,7 +237,11 @@ function Row({ pair, photoMap }: { pair: Slot[]; photoMap: Record<string, string
 
 type Line = { id: string; name: string };
 
-export default function PhotoReportDashboard() {
+export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" }) {
+  const DOC_TITLE = doc === "gongga" ? "지중설비별 공가조사표" : "맨홀점검사진대지";
+  const DOC_DESC = doc === "gongga"
+    ? "드라이브 폴더의 점검사진을 실시간으로 읽어 선로별 공가조사표(가로) PDF 생성"
+    : "드라이브 폴더의 점검사진을 실시간으로 읽어 맨홀점검사진대지(세로) PDF 생성";
   const [apiKey, setApiKey] = useState("");
   const [folder, setFolder] = useState("");
   const [project, setProject] = useState(DEFAULT_PROJECT);
@@ -381,7 +387,7 @@ export default function PhotoReportDashboard() {
   return (
     <>
       <div className="apage-head no-print">
-        <div><h1>지중설비별 공가조사표 · 맨홀점검사진대지</h1><p>드라이브 폴더의 점검사진을 실시간으로 읽어 선로별 공가조사표 + 사진대지 PDF 생성</p></div>
+        <div><h1>{DOC_TITLE}</h1><p>{DOC_DESC}</p></div>
         {lines.length > 0 && (
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn--ghost btn--sm" type="button" onClick={loadAll} disabled={loadingAll}>
@@ -390,8 +396,7 @@ export default function PhotoReportDashboard() {
             {mode === "single" && selected && (
               <button className="btn btn--ghost btn--sm" type="button" onClick={() => openLine(selected)}>새로고침</button>
             )}
-            <button className="btn btn--sm" type="button" onClick={() => doPrint("gongga")} disabled={loadingPhotos || loadingAll || !canPrint}>🖨 공가조사표(가로)</button>
-            <button className="btn btn--sm" type="button" onClick={() => doPrint("sajin")} disabled={loadingPhotos || loadingAll || !canPrint}>🖨 사진대지(세로)</button>
+            <button className="btn btn--sm" type="button" onClick={() => doPrint(doc)} disabled={loadingPhotos || loadingAll || !canPrint}>🖨 인쇄 · PDF 저장</button>
           </div>
         )}
       </div>
@@ -467,12 +472,12 @@ export default function PhotoReportDashboard() {
                     <strong style={{ color: "var(--ink)" }}>{selected.name}</strong> · 매칭 {matched}/12장
                     {photoMap["11"] ? "" : " · 11번(열화상) 비움"}
                     {extras.length > 0 ? ` · 기타(공) ${extras.length}장` : ""}
-                    {" · 공가조사표 + 사진대지 2장"}
+                    {doc === "gongga" ? " · 공가조사표(가로)" : " · 사진대지 2장(세로)"}
                   </>
                 )}
               </div>
               <div className="sd-print">
-                <LineReport project={project} lineName={selected.name} digital={digitalOf(selected.name)} photoMap={photoMap} extras={extras} />
+                <LineReport doc={doc} project={project} lineName={selected.name} digital={digitalOf(selected.name)} photoMap={photoMap} extras={extras} />
               </div>
             </>
           )}
@@ -486,12 +491,12 @@ export default function PhotoReportDashboard() {
             ) : (
               <>
                 <div className="no-print" style={{ marginBottom: 10, fontSize: 13, color: "var(--muted)" }}>
-                  전체 <strong style={{ color: "var(--ink)" }}>{allReports.length}개</strong> 선로 · “🖨 인쇄·PDF 저장”을 누르면 선로별 공가조사표 + 사진대지가 한 번에 출력됩니다.
+                  전체 <strong style={{ color: "var(--ink)" }}>{allReports.length}개</strong> 선로 · “🖨 인쇄·PDF 저장”을 누르면 {DOC_TITLE}가 한 번에 출력됩니다.
                 </div>
                 <div className="sd-print">
                   {allReports.map((r) => (
                     <Fragment key={r.line.id}>
-                      <LineReport project={project} lineName={r.line.name} digital={digitalOf(r.line.name)} photoMap={r.photoMap} extras={r.extras} />
+                      <LineReport doc={doc} project={project} lineName={r.line.name} digital={digitalOf(r.line.name)} photoMap={r.photoMap} extras={r.extras} />
                     </Fragment>
                   ))}
                 </div>
