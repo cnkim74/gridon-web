@@ -39,6 +39,8 @@ const ICONS: Record<string, ReactNode> = {
   report: (<><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" /><rect x="8" y="12" width="3.5" height="3.5" rx=".4" /><rect x="12.5" y="12" width="3.5" height="3.5" rx=".4" /></>),
   "report-gongga": (<><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M4 9h16M4 15h16M10 3v18" /></>),
   "report-sajin": (<><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" /><path d="M21 15l-5-5L5 21" /></>),
+  namecard: (<><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="8" cy="11" r="2" /><path d="M4.5 16.5a3.5 3.5 0 0 1 7 0M14 9.5h4M14 13h3" /></>),
+  bizreg: (<><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" /><path d="m9 14 1.5 1.5L14 12" /></>),
 };
 
 // ── Nav types ──────────────────────────────────────────────────────────────
@@ -84,11 +86,15 @@ const NAV: [string, NavEntry[]][] = [
     ["hrreport", "직원 종합현황", "/admin/hr-report"],
     ["cert", "증명서 관리", "/admin/cert"],
     ["insurance", "4대보험 납부현황", "/admin/insurance"],
+  ]],
+  ["사무", [
+    ["quotes", "견적서", "/admin/quotes"],
     ["stamp", "직인 관리", "/admin/stamp"],
     ["logo", "로고 관리", "/admin/logo"],
+    ["namecard", "명함 관리", "/admin/business-cards"],
+    ["bizreg", "사업자 등록", "/admin/business-license"],
   ]],
   ["재무", [
-    ["quotes", "견적서", "/admin/quotes"],
     ["finance", "수입·지출", "/admin/finance"],
     ["expenses", "지출 관리", "/admin/expenses"],
   ]],
