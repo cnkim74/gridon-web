@@ -30,6 +30,8 @@ function emptyDraft(): Draft {
   return { photo_url: null, company_name: "", biz_no: "", ceo: "", corp_no: "", biz_type: "", biz_item: "", address: "", open_date: "", notes: "" };
 }
 
+function isPdf(u: string) { return u.toLowerCase().split("?")[0].endsWith(".pdf"); }
+
 // 파일 → base64 (data URL에서 분리)
 function fileToBase64(file: File): Promise<{ data: string; mediaType: string }> {
   return new Promise((resolve, reject) => {
@@ -119,8 +121,15 @@ function LicenseEditor({ item, onSave, onClose }: { item: License | null; onSave
 
         <div onClick={() => fileRef.current?.click()} style={{ border: "1.5px dashed var(--line-2)", borderRadius: 6, padding: "14px 18px", marginBottom: 18, cursor: "pointer", display: "flex", alignItems: "center", gap: 14, background: "var(--faint)" }}>
           {d.photo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={d.photo_url} alt="사업자등록증" style={{ width: 64, height: 84, objectFit: "cover", borderRadius: 4, border: "1px solid var(--line)", flexShrink: 0 }} />
+            isPdf(d.photo_url) ? (
+              <div style={{ width: 64, height: 84, borderRadius: 4, border: "1px solid var(--line)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, flexShrink: 0, background: "#fff" }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#b3261e" strokeWidth="1.6"><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" /></svg>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#b3261e" }}>PDF</span>
+              </div>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={d.photo_url} alt="사업자등록증" style={{ width: 64, height: 84, objectFit: "cover", borderRadius: 4, border: "1px solid var(--line)", flexShrink: 0 }} />
+            )
           ) : (
             <div style={{ width: 64, height: 84, borderRadius: 4, background: "var(--line-2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" style={{ opacity: .4 }}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" /><path d="M21 15l-5-5L5 21" /></svg>
@@ -128,15 +137,13 @@ function LicenseEditor({ item, onSave, onClose }: { item: License | null; onSave
           )}
           <div>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 3 }}>
-              {uploading ? "업로드 중…" : ocrBusy ? "🤖 등록증 자동 인식 중…" : d.photo_url ? "등록증 사진 변경" : "사업자등록증 촬영·첨부"}
+              {uploading ? "업로드 중…" : ocrBusy ? "🤖 등록증 자동 인식 중…" : d.photo_url ? "파일 변경" : "사업자등록증 첨부 (사진 또는 PDF)"}
             </div>
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>사진을 올리면 상호·등록번호·대표자 등이 자동 입력됩니다 · JPG · PNG</div>
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>사진/PDF를 올리면 상호·등록번호·대표자 등이 자동 입력됩니다 · JPG · PNG · PDF</div>
           </div>
         </div>
-        <input ref={fileRef} type="file" accept="image/*"
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-ignore
-          capture="environment" style={{ display: "none" }}
+        <input ref={fileRef} type="file" accept="image/*,application/pdf"
+          style={{ display: "none" }}
           onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); }} />
 
         <div className="field" style={{ marginBottom: 12 }}>{L("상호 (법인명) *")}<input className="input" value={d.company_name} onChange={(e) => set("company_name", e.target.value)} /></div>
@@ -241,10 +248,17 @@ export default function BusinessLicenseDashboard() {
                 <tr key={e.id}>
                   <td style={{ textAlign: "center" }}>
                     {e.photo_url ? (
-                      <a href={e.photo_url} target="_blank" rel="noreferrer">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={e.photo_url} alt={e.company_name} style={{ width: 38, height: 50, objectFit: "cover", borderRadius: 4, border: "1px solid var(--line)", cursor: "pointer" }} />
-                      </a>
+                      isPdf(e.photo_url) ? (
+                        <a href={e.photo_url} target="_blank" rel="noreferrer" title="PDF 보기" style={{ width: 38, height: 50, borderRadius: 4, border: "1px solid var(--line)", display: "inline-flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, textDecoration: "none" }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b3261e" strokeWidth="1.6"><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" /></svg>
+                          <span style={{ fontSize: 8, fontWeight: 700, color: "#b3261e" }}>PDF</span>
+                        </a>
+                      ) : (
+                        <a href={e.photo_url} target="_blank" rel="noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={e.photo_url} alt={e.company_name} style={{ width: 38, height: 50, objectFit: "cover", borderRadius: 4, border: "1px solid var(--line)", cursor: "pointer" }} />
+                        </a>
+                      )
                     ) : (
                       <div style={{ width: 38, height: 50, borderRadius: 4, border: "1px dashed var(--line-2)", display: "inline-flex", alignItems: "center", justifyContent: "center", opacity: .35 }}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" /><path d="M21 15l-5-5L5 21" /></svg>
