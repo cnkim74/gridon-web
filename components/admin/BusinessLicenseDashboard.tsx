@@ -30,6 +30,23 @@ function emptyDraft(): Draft {
   return { photo_url: null, company_name: "", biz_no: "", ceo: "", corp_no: "", biz_type: "", biz_item: "", address: "", open_date: "", notes: "" };
 }
 
+// 파일 → base64 (data URL에서 분리)
+function fileToBase64(file: File): Promise<{ data: string; mediaType: string }> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const res = r.result as string;
+      const comma = res.indexOf(",");
+      const meta = res.slice(0, comma);
+      const data = res.slice(comma + 1);
+      const mt = meta.match(/data:(.*?);/)?.[1] || file.type || "image/jpeg";
+      resolve({ data, mediaType: mt });
+    };
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
 // ── 편집 모달 ────────────────────────────────────────────────────────────────
 
 function LicenseEditor({ item, onSave, onClose }: { item: License | null; onSave: () => void; onClose: () => void }) {
@@ -37,10 +54,33 @@ function LicenseEditor({ item, onSave, onClose }: { item: License | null; onSave
   const fileRef = useRef<HTMLInputElement>(null);
   const [d, setD] = useState<Draft>(() => item ? { ...item, open_date: item.open_date ?? "" } : emptyDraft());
   const [uploading, setUploading] = useState(false);
+  const [ocrBusy, setOcrBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   function set<K extends keyof Draft>(k: K, v: Draft[K]) { setD((p) => ({ ...p, [k]: v })); }
+
+  async function runOcr(file: File) {
+    setOcrBusy(true); setErr(null);
+    try {
+      const { data, mediaType } = await fileToBase64(file);
+      const { data: result, error } = await supabase.functions.invoke("ocr-extract", {
+        body: { image_base64: data, media_type: mediaType, kind: "license" },
+      });
+      if (error) throw error;
+      const r = result as Record<string, string>;
+      setD((prev) => {
+        const next = { ...prev };
+        (["company_name", "biz_no", "ceo", "corp_no", "biz_type", "biz_item", "address", "open_date"] as (keyof Draft)[])
+          .forEach((k) => { const v = r[k as string]; if (v && v.trim()) next[k] = v.trim() as never; });
+        return next;
+      });
+    } catch (e) {
+      setErr("자동 인식 실패: " + (e as Error).message + " (직접 입력하셔도 됩니다)");
+    } finally {
+      setOcrBusy(false);
+    }
+  }
 
   async function uploadPhoto(file: File) {
     setUploading(true); setErr(null);
@@ -50,6 +90,7 @@ function LicenseEditor({ item, onSave, onClose }: { item: License | null; onSave
     setUploading(false);
     if (error) { setErr(error.message); return; }
     set("photo_url", `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`);
+    runOcr(file); // 업로드 후 자동 인식
   }
 
   async function save() {
@@ -86,8 +127,10 @@ function LicenseEditor({ item, onSave, onClose }: { item: License | null; onSave
             </div>
           )}
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 3 }}>{uploading ? "업로드 중…" : d.photo_url ? "등록증 사진 변경" : "사업자등록증 촬영·첨부"}</div>
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>카메라 또는 파일 선택 · JPG · PNG</div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 3 }}>
+              {uploading ? "업로드 중…" : ocrBusy ? "🤖 등록증 자동 인식 중…" : d.photo_url ? "등록증 사진 변경" : "사업자등록증 촬영·첨부"}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>사진을 올리면 상호·등록번호·대표자 등이 자동 입력됩니다 · JPG · PNG</div>
           </div>
         </div>
         <input ref={fileRef} type="file" accept="image/*"

@@ -34,6 +34,23 @@ function emptyDraft(): Draft {
   return { photo_url: null, name: "", company: "", title: "", dept: "", mobile: "", phone: "", email: "", fax: "", address: "", category: "거래처", notes: "" };
 }
 
+// 파일 → base64 (data URL에서 분리)
+function fileToBase64(file: File): Promise<{ data: string; mediaType: string }> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const res = r.result as string;
+      const comma = res.indexOf(",");
+      const meta = res.slice(0, comma);
+      const data = res.slice(comma + 1);
+      const mt = meta.match(/data:(.*?);/)?.[1] || file.type || "image/jpeg";
+      resolve({ data, mediaType: mt });
+    };
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
 // ── 편집 모달 ────────────────────────────────────────────────────────────────
 
 function CardEditor({ item, onSave, onClose }: { item: Card | null; onSave: () => void; onClose: () => void }) {
@@ -41,10 +58,34 @@ function CardEditor({ item, onSave, onClose }: { item: Card | null; onSave: () =
   const fileRef = useRef<HTMLInputElement>(null);
   const [d, setD] = useState<Draft>(() => item ? { ...item } : emptyDraft());
   const [uploading, setUploading] = useState(false);
+  const [ocrBusy, setOcrBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   function set<K extends keyof Draft>(k: K, v: Draft[K]) { setD((p) => ({ ...p, [k]: v })); }
+
+  async function runOcr(file: File) {
+    setOcrBusy(true); setErr(null);
+    try {
+      const { data, mediaType } = await fileToBase64(file);
+      const { data: result, error } = await supabase.functions.invoke("ocr-extract", {
+        body: { image_base64: data, media_type: mediaType, kind: "card" },
+      });
+      if (error) throw error;
+      const r = result as Record<string, string>;
+      // 추출된 비어있지 않은 값만 채움
+      setD((prev) => {
+        const next = { ...prev };
+        (["name", "company", "title", "dept", "mobile", "phone", "email", "fax", "address"] as (keyof Draft)[])
+          .forEach((k) => { const v = r[k as string]; if (v && v.trim()) next[k] = v.trim() as never; });
+        return next;
+      });
+    } catch (e) {
+      setErr("자동 인식 실패: " + (e as Error).message + " (직접 입력하셔도 됩니다)");
+    } finally {
+      setOcrBusy(false);
+    }
+  }
 
   async function uploadPhoto(file: File) {
     setUploading(true); setErr(null);
@@ -54,6 +95,7 @@ function CardEditor({ item, onSave, onClose }: { item: Card | null; onSave: () =
     setUploading(false);
     if (error) { setErr(error.message); return; }
     set("photo_url", `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`);
+    runOcr(file); // 업로드 후 자동 인식
   }
 
   async function save() {
@@ -91,8 +133,10 @@ function CardEditor({ item, onSave, onClose }: { item: Card | null; onSave: () =
             </div>
           )}
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 3 }}>{uploading ? "업로드 중…" : d.photo_url ? "명함 사진 변경" : "명함 사진 촬영·첨부"}</div>
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>카메라 또는 파일 선택 · JPG · PNG</div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 3 }}>
+              {uploading ? "업로드 중…" : ocrBusy ? "🤖 명함 자동 인식 중…" : d.photo_url ? "명함 사진 변경" : "명함 사진 촬영·첨부"}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>사진을 올리면 이름·회사·연락처가 자동 입력됩니다 · JPG · PNG</div>
           </div>
         </div>
         <input ref={fileRef} type="file" accept="image/*"
