@@ -89,9 +89,11 @@ function buildPhotoMap(files: DriveFile[]): { map: Record<string, string>; extra
   const map: Record<string, string> = {};
   const gongs: { n: number; url: string }[] = [];
   for (const f of files.filter(isImage)) {
-    const s = slotNumOf(f.name);
+    // 맥에서 올린 한글 파일명은 유니코드 분해형(NFD)이라 NFC로 정규화 후 매칭
+    const nm = (f.name ?? "").normalize("NFC");
+    const s = slotNumOf(nm);
     if (s) { if (!map[s]) map[s] = driveImg(f.id); continue; }
-    const g = gongNumOf(f.name);
+    const g = gongNumOf(nm);
     if (g !== null) gongs.push({ n: g, url: driveImg(f.id) });
     // 그 외 파일명은 무시
   }
