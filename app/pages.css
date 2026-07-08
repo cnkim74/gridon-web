@@ -349,7 +349,10 @@
   body *{visibility:hidden}
   .sd-print, .sd-print *{visibility:visible}
   .sd-print{position:absolute;left:0;top:0;width:100%}
-  .sd-page,.gg-page{margin:0;border:none;box-shadow:none;page-break-after:always}
+  .sd-page,.gg-page{margin:0;border:none;box-shadow:none;break-before:page;page-break-before:always;break-inside:avoid}
+  /* 첫 페이지의 앞 나눔은 브라우저가 무시 → 앞뒤 빈 페이지 없음 */
+  .sd-print > *:first-child > .sd-page:first-child,
+  .sd-print > *:first-child > .gg-page:first-child{break-before:auto;page-break-before:auto}
   .sd-page{min-height:auto;padding:12mm 13mm}
   .gg-page{min-height:auto;padding:10mm 12mm}
   .no-print{display:none!important}
