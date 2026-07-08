@@ -127,7 +127,7 @@ function EditableField({ value, onSave, width }: { value: string; onSave: (v: st
       onChange={(e) => setV(e.target.value)}
       onBlur={() => { if (v !== value) onSave(v.trim()); }}
       className="gg-editable"
-      style={{ minWidth: width, width, border: "none", borderBottom: "1px solid #999", background: "transparent", font: "inherit", padding: "0 4px", color: "inherit" }}
+      style={{ minWidth: width, width, border: "none", borderBottom: "1px solid #999", background: "transparent", font: "inherit", padding: "0 4px", color: "inherit", textAlign: "center" }}
     />
   );
 }
