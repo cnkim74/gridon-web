@@ -13,9 +13,9 @@ type Slot = { no: string; label: string };
 const PAGE1: Slot[] = [
   { no: "01", label: "번호찰" },
   { no: "02", label: "전경" },
-  { no: "03", label: "맨홀뚜껑" },
+  { no: "03", label: "단차" },
   { no: "04", label: "침수높이" },
-  { no: "05", label: "양수전" },
+  { no: "05", label: "양수중" },
   { no: "06", label: "양수후" },
 ];
 const PAGE2: Slot[] = [
