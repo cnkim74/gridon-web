@@ -101,9 +101,9 @@ function buildPhotoMap(files: DriveFile[]): { map: Record<string, string>; extra
   return { map, extras: gongs.map((e) => e.url) };
 }
 
-// 선로명 정규화 (공백 제거) — 폴더명 ↔ DB line_name 매칭용
+// 선로명 정규화 (유니코드 NFC + 공백 제거) — 폴더명(NFD) ↔ DB line_name(NFC) 매칭용
 function normLine(s: string) {
-  return s.replace(/\s+/g, "").toLowerCase();
+  return (s ?? "").normalize("NFC").replace(/\s+/g, "").toLowerCase();
 }
 
 // ── 지중설비별 공가조사 사진대지 (가로 A4, 2×4 그리드) ───────────────────────
