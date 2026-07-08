@@ -139,13 +139,13 @@ function GonggaPage({ lineName, digital, photoMap, extras }: {
       <GonggaHead lineName={lineName} digital={digital} />
       <div className="gg-grid">
         <GgCell url={photoMap["02"]} cap="전경" />
+        <GgCell url={photoMap["01"]} cap="표시찰" />
         <GgCell url={photoMap["07"]} cap="서" />
         <GgCell url={photoMap["08"]} cap="동" />
         <GgCell url={photoMap["09"]} cap="북" />
         <GgCell url={photoMap["10"]} cap="남" />
         <GgCell url={extras[0]} cap="기타" />
         <GgCell url={extras[1]} cap="기타" />
-        <GgCell url={extras[2]} cap="기타" />
       </div>
     </div>
   );
@@ -171,8 +171,8 @@ function LineReport({ doc, project, lineName, digital, photoMap, extras }: {
 }) {
   const name = lineName === "(이 폴더)" ? "" : lineName;
   if (doc === "gongga") {
-    // 기타: 첫 3장은 본장, 나머지는 8장씩 추가장
-    const rest = extras.slice(3);
+    // 기타: 첫 2장(공1·공2)은 본장, 나머지(공3~)는 8장씩 추가장
+    const rest = extras.slice(2);
     const extraPages: string[][] = [];
     for (let i = 0; i < rest.length; i += 8) extraPages.push(rest.slice(i, i + 8));
     return (
