@@ -322,12 +322,13 @@
 
 /* ── 맨홀 점검 사진대지 (세로 A4) ─────────────────────────────── */
 .sd-page{width:210mm;min-height:295mm;background:#fff;color:#000;margin:0 auto 18px;padding:16mm 15mm;box-sizing:border-box;border:1px solid var(--line-2);box-shadow:0 2px 14px rgba(0,0,0,.06)}
-.sd-title{text-align:center;font-size:27px;font-weight:700;letter-spacing:.35em;margin:0 0 12mm;padding-left:.35em}
-.sd-head{display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:5mm;padding:0 1px}
+.sd-title{text-align:center;font-size:25px;font-weight:700;letter-spacing:.35em;margin:0 0 8mm;padding-left:.35em}
+.sd-head{display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:4mm;padding:0 1px}
 .sd-grid{width:100%;border-collapse:collapse;table-layout:fixed}
 .sd-grid td{border:1px solid #000;width:50%}
-.sd-cell{height:70mm;text-align:center;vertical-align:middle;padding:0;overflow:hidden}
-.sd-cell img{width:100%;height:70mm;object-fit:contain;display:block}
+.sd-grid tr{break-inside:avoid;page-break-inside:avoid}
+.sd-cell{height:62mm;text-align:center;vertical-align:middle;padding:0;overflow:hidden}
+.sd-cell img{width:100%;height:62mm;object-fit:contain;display:block}
 .sd-cap{height:8mm;text-align:center;font-size:12px;font-weight:600;background:#fff}
 .sd-empty{font-size:11px;color:#bbb}
 
