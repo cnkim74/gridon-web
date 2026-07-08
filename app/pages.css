@@ -349,12 +349,11 @@
   body *{visibility:hidden}
   .sd-print, .sd-print *{visibility:visible}
   .sd-print{position:absolute;left:0;top:0;width:100%}
-  .sd-page,.gg-page{margin:0;border:none;box-shadow:none;break-before:page;page-break-before:always;break-inside:avoid}
-  /* 첫 페이지의 앞 나눔은 브라우저가 무시 → 앞뒤 빈 페이지 없음 */
-  .sd-print > *:first-child > .sd-page:first-child,
-  .sd-print > *:first-child > .gg-page:first-child{break-before:auto;page-break-before:auto}
-  .sd-page{min-height:auto;padding:12mm 13mm}
-  .gg-page{min-height:auto;padding:10mm 12mm}
+  /* 각 페이지는 '앞에서' 나눔 → 마지막 뒤 빈 페이지 없음. 첫 페이지 앞 나눔은 브라우저가 자동 무시 */
+  .sd-page,.gg-page{margin:0!important;border:none!important;box-shadow:none!important;width:100%!important;min-height:0!important;break-inside:avoid;break-before:page;page-break-before:always}
+  .sd-print > :first-child, .sd-print > :first-child > :first-child{break-before:avoid;page-break-before:avoid}
+  .sd-page{padding:10mm 12mm}
+  .gg-page{padding:8mm 10mm}
   .no-print{display:none!important}
   /* 문서별 따로 인쇄: 인쇄 종류에 맞는 문서만 노출 */
   body.printing-gongga .sajin-doc{display:none!important}
