@@ -314,6 +314,11 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
           m[normLine(r.line_name)] = r.digital_number;
         }
       }
+      // 별도 전산화번호 매핑표(엑셀 업로드분)를 위에 덮어씀
+      const { data: dm }: SbaRes = await sba.from("digital_map").select("line_name,digital_number");
+      for (const r of (dm as { line_name: string; digital_number: string }[]) ?? []) {
+        if (r.line_name && r.digital_number) m[normLine(r.line_name)] = r.digital_number;
+      }
       setDigitalMap(m);
     })();
     // 선로별 수동 입력값 로드
