@@ -117,26 +117,45 @@ function GgCell({ url, cap }: { url?: string; cap?: string }) {
   );
 }
 
-function GonggaHead({ lineName, digital }: { lineName: string; digital: string }) {
+// 밑줄 스타일의 편집 가능한 입력칸 (화면에서 입력, 인쇄 시 텍스트로 출력)
+function EditableField({ value, onSave, width }: { value: string; onSave: (v: string) => void; width: number }) {
+  const [v, setV] = useState(value);
+  useEffect(() => { setV(value); }, [value]);
+  return (
+    <input
+      value={v}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={() => { if (v !== value) onSave(v.trim()); }}
+      className="gg-editable"
+      style={{ minWidth: width, width, border: "none", borderBottom: "1px solid #999", background: "transparent", font: "inherit", padding: "0 4px", color: "inherit" }}
+    />
+  );
+}
+
+function GonggaHead({ lineName, digital, equipType, onOverride }: {
+  lineName: string; digital: string; equipType: string; onOverride: (field: "digital_number" | "equip_type", v: string) => void;
+}) {
   return (
     <>
       <div className="gg-title doc-title">□ 지중설비별 공가조사 사진대지</div>
       <div className="gg-head">
         <span>○ 설비명 : <span className="v">{lineName}</span></span>
-        <span>○ 전산화번호 : <span className="v">{digital}</span></span>
-        <span>○ 설비종류 : <span className="v">　</span></span>
+        <span>○ 전산화번호 : <EditableField value={digital} width={110} onSave={(v) => onOverride("digital_number", v)} /></span>
+        <span>○ 설비종류 : <EditableField value={equipType} width={90} onSave={(v) => onOverride("equip_type", v)} /></span>
       </div>
     </>
   );
 }
 
-// 본장: 헤더 + 전경/서/동/북 + 남/기타·기타·기타(공1~공3)
-function GonggaPage({ lineName, digital, photoMap, extras }: {
-  lineName: string; digital: string; photoMap: Record<string, string>; extras: string[];
+type OverrideFn = (field: "digital_number" | "equip_type", v: string) => void;
+
+// 본장: 헤더 + 전경/표시찰/서/동 + 북/남/기타·기타(공1~공2)
+function GonggaPage({ lineName, digital, equipType, onOverride, photoMap, extras }: {
+  lineName: string; digital: string; equipType: string; onOverride: OverrideFn; photoMap: Record<string, string>; extras: string[];
 }) {
   return (
     <div className="gg-page doc-font">
-      <GonggaHead lineName={lineName} digital={digital} />
+      <GonggaHead lineName={lineName} digital={digital} equipType={equipType} onOverride={onOverride} />
       <div className="gg-grid">
         <GgCell url={photoMap["02"]} cap="전경" />
         <GgCell url={photoMap["01"]} cap="표시찰" />
@@ -151,11 +170,11 @@ function GonggaPage({ lineName, digital, photoMap, extras }: {
   );
 }
 
-// 기타 추가장 (공4 이후) — 한 장에 8칸(2×4) 테두리 모두 표시, 이미지 있는 칸만 "기타"
-function GonggaExtraPage({ lineName, digital, urls }: { lineName: string; digital: string; urls: string[] }) {
+// 기타 추가장 (공3 이후) — 한 장에 8칸(2×4) 테두리 모두 표시, 이미지 있는 칸만 "기타"
+function GonggaExtraPage({ lineName, digital, equipType, onOverride, urls }: { lineName: string; digital: string; equipType: string; onOverride: OverrideFn; urls: string[] }) {
   return (
     <div className="gg-page gg-page--extra doc-font">
-      <GonggaHead lineName={lineName} digital={digital} />
+      <GonggaHead lineName={lineName} digital={digital} equipType={equipType} onOverride={onOverride} />
       <div className="gg-grid">
         {Array.from({ length: 8 }).map((_, i) => (
           <GgCell key={i} url={urls[i]} cap={urls[i] ? "기타" : undefined} />
@@ -166,8 +185,8 @@ function GonggaExtraPage({ lineName, digital, urls }: { lineName: string; digita
 }
 
 // 한 선로 출력: doc 종류에 따라 공가조사표(가로) 또는 사진대지(세로)만
-function LineReport({ doc, project, lineName, digital, photoMap, extras }: {
-  doc: "gongga" | "sajin"; project: string; lineName: string; digital: string; photoMap: Record<string, string>; extras: string[];
+function LineReport({ doc, project, lineName, digital, equipType, onOverride, photoMap, extras }: {
+  doc: "gongga" | "sajin"; project: string; lineName: string; digital: string; equipType: string; onOverride: OverrideFn; photoMap: Record<string, string>; extras: string[];
 }) {
   const name = lineName === "(이 폴더)" ? "" : lineName;
   if (doc === "gongga") {
@@ -177,9 +196,9 @@ function LineReport({ doc, project, lineName, digital, photoMap, extras }: {
     for (let i = 0; i < rest.length; i += 8) extraPages.push(rest.slice(i, i + 8));
     return (
       <div className="gongga-doc">
-        <GonggaPage lineName={name} digital={digital} photoMap={photoMap} extras={extras} />
+        <GonggaPage lineName={name} digital={digital} equipType={equipType} onOverride={onOverride} photoMap={photoMap} extras={extras} />
         {extraPages.map((urls, pi) => (
-          <GonggaExtraPage key={pi} lineName={name} digital={digital} urls={urls} />
+          <GonggaExtraPage key={pi} lineName={name} digital={digital} equipType={equipType} onOverride={onOverride} urls={urls} />
         ))}
       </div>
     );
@@ -266,7 +285,14 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
 
   // 전산화번호 맵 (정규화 선로명 → 전산화번호)
   const [digitalMap, setDigitalMap] = useState<Record<string, string>>({});
-  const digitalOf = (lineName: string) => digitalMap[normLine(lineName)] ?? "";
+  // 선로별 수동 입력값 (전산화번호·설비종류)
+  const [overrides, setOverrides] = useState<Record<string, { digital_number?: string; equip_type?: string }>>({});
+  const digitalOf = (lineName: string) => overrides[lineName]?.digital_number || digitalMap[normLine(lineName)] || "";
+  const equipTypeOf = (lineName: string) => overrides[lineName]?.equip_type || "";
+  async function saveOverride(lineName: string, field: "digital_number" | "equip_type", value: string) {
+    setOverrides((prev) => ({ ...prev, [lineName]: { ...prev[lineName], [field]: value } }));
+    await sba.from("line_overrides").upsert({ line_name: lineName, [field]: value, updated_at: new Date().toISOString() });
+  }
 
   // 설정 로드 (Supabase) → 값이 있으면 선로 목록 자동 로드 + 전산화번호 맵 로드
   useEffect(() => {
@@ -289,6 +315,14 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
         }
       }
       setDigitalMap(m);
+    })();
+    // 선로별 수동 입력값 로드
+    (async () => {
+      const { data }: SbaRes = await sba.from("line_overrides").select("line_name,digital_number,equip_type");
+      const rows = (data as { line_name: string; digital_number: string | null; equip_type: string | null }[]) ?? [];
+      const o: Record<string, { digital_number?: string; equip_type?: string }> = {};
+      for (const r of rows) o[r.line_name] = { digital_number: r.digital_number ?? undefined, equip_type: r.equip_type ?? undefined };
+      setOverrides(o);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -479,7 +513,7 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
                 )}
               </div>
               <div className="sd-print">
-                <LineReport doc={doc} project={project} lineName={selected.name} digital={digitalOf(selected.name)} photoMap={photoMap} extras={extras} />
+                <LineReport doc={doc} project={project} lineName={selected.name} digital={digitalOf(selected.name)} equipType={equipTypeOf(selected.name)} onOverride={(f, v) => saveOverride(selected.name, f, v)} photoMap={photoMap} extras={extras} />
               </div>
             </>
           )}
@@ -498,7 +532,7 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
                 <div className="sd-print">
                   {allReports.map((r) => (
                     <Fragment key={r.line.id}>
-                      <LineReport doc={doc} project={project} lineName={r.line.name} digital={digitalOf(r.line.name)} photoMap={r.photoMap} extras={r.extras} />
+                      <LineReport doc={doc} project={project} lineName={r.line.name} digital={digitalOf(r.line.name)} equipType={equipTypeOf(r.line.name)} onOverride={(f, v) => saveOverride(r.line.name, f, v)} photoMap={r.photoMap} extras={r.extras} />
                     </Fragment>
                   ))}
                 </div>
