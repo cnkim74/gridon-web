@@ -392,6 +392,8 @@
 .rec-detail .jc{width:8%}
 .rec-detail .temp{width:13%}
 .rec-detail .chk{font-weight:800}
+.rec-detail .jc-click{cursor:pointer}
+.rec-detail .jc-click:hover{background:#eef}
 .rec-special{height:22mm;text-align:left!important;vertical-align:top;padding:3mm}
 
 @media print{

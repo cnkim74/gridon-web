@@ -143,6 +143,7 @@ type ReportOverride = {
   temps?: DlTemp[];     // D/L별 접속재 온도
   overall?: string;     // 종합판정
   special?: string;     // 특이사항
+  marks?: Record<string, "부">; // 판정결과: 기본 적합, 부적합인 행만 저장 (rowId → "부")
 };
 const DL_MAX = 5;
 
@@ -363,17 +364,31 @@ function GeneralInspectPage({ derived, ov, rd, onReport }: { derived: { title: s
 // ── 검사기록표 ────────────────────────────────────────────────────────────────
 const REC_ROWS = ["케이블, 접속재", "접속재 온도", "관로구 방수장치", "금구류", "선로표시찰 상태"];
 
-function DlBlock({ active, temps, onTemp }: { active: boolean; temps: DlTemp; onTemp: (t: DlTemp) => void }) {
+// 판정결과 두 칸(적합/부적합) — 기본 적합, 클릭으로 토글. 화면에서만 클릭·인쇄엔 ✓만 표시.
+function JudgeCells({ active, bad, onSet }: { active: boolean; bad: boolean; onSet: (bad: boolean) => void }) {
+  if (!active) return (<><td /><td /></>);
+  return (
+    <>
+      <td className="chk jc-click" title="적합" onClick={() => onSet(false)}>{bad ? "" : "✓"}</td>
+      <td className="chk jc-click" title="부적합" onClick={() => onSet(true)}>{bad ? "✓" : ""}</td>
+    </>
+  );
+}
+
+function DlBlock({ idx, active, temps, onTemp, marks, onMark }: {
+  idx: number; active: boolean; temps: DlTemp; onTemp: (t: DlTemp) => void; marks: Record<string, "부">; onMark: (rowId: string, bad: boolean) => void;
+}) {
   return (
     <>
       {REC_ROWS.map((label, r) => {
-        const isTemp = r === 1, isMark = r === 4; // 선로표시찰=부적합, 나머지 적합
+        const isTemp = r === 1;
+        const rowId = `d${idx}_${r}`;
+        const bad = marks[rowId] === "부";
         return (
           <tr key={r}>
             {r === 0 && <td className="gubun" rowSpan={5}>{active ? "-D/L" : ""}</td>}
             <td className="sub">{label}</td>
-            <td className="chk">{active && !isMark ? "✓" : ""}</td>
-            <td className="chk">{active && isMark ? "✓" : ""}</td>
+            <JudgeCells active={active} bad={bad} onSet={(b) => onMark(rowId, b)} />
             {isTemp ? (
               <>
                 <td className="temp">{active ? <REditable value={temps.a} onSave={(v) => onTemp({ ...temps, a: v })} /> : ""}</td>
@@ -398,6 +413,12 @@ function RecordPage({ derived, ov, rd, onReport, onDigital, digital }: { derived
     next[i] = t;
     onReport({ temps: next });
   };
+  const marks = ov.marks ?? {};
+  const setMark = (rowId: string, bad: boolean) => {
+    const next = { ...marks };
+    if (bad) next[rowId] = "부"; else delete next[rowId];
+    onReport({ marks: next });
+  };
   return (
     <div className="ri-page rec-page doc-font">
       <div className="rec-title doc-title">맨·핸드홀 내 전력설비 검사기록표</div>
@@ -419,12 +440,17 @@ function RecordPage({ derived, ov, rd, onReport, onDigital, digital }: { derived
           <tr><th rowSpan={2} className="gubun">구분</th><th rowSpan={2} className="sub">세부항목</th>
               <th colSpan={2}>판정결과(√)</th><th colSpan={3}>비 고</th></tr>
           <tr><th className="jc">적합</th><th className="jc">부적합</th><th className="temp">A상</th><th className="temp">B상</th><th className="temp">C상</th></tr>
-          {["구조물 상태(균열, 누수)", "유독가스 발생유무", "접지선 상태"].map((t, i) => (
-            <tr key={t}>{i === 0 && <td className="gubun" rowSpan={3}>구조물</td>}
-              <td className="sub">{t}</td><td className="chk">✓</td><td /><td /><td /><td /></tr>
-          ))}
+          {["구조물 상태(균열, 누수)", "유독가스 발생유무", "접지선 상태"].map((t, i) => {
+            const rowId = `s${i}`; const bad = marks[rowId] === "부";
+            return (
+              <tr key={t}>{i === 0 && <td className="gubun" rowSpan={3}>구조물</td>}
+                <td className="sub">{t}</td>
+                <JudgeCells active bad={bad} onSet={(b) => setMark(rowId, b)} />
+                <td /><td /><td /></tr>
+            );
+          })}
           {Array.from({ length: DL_MAX }).map((_, i) => (
-            <DlBlock key={i} active={i < dlCount} temps={tempAt(i)} onTemp={(t) => setTemp(i, t)} />
+            <DlBlock key={i} idx={i} active={i < dlCount} temps={tempAt(i)} onTemp={(t) => setTemp(i, t)} marks={marks} onMark={setMark} />
           ))}
           <tr><td className="gubun">특이사항</td><td className="rec-special" colSpan={6}>
             <REditable value={ov.special ?? ""} onSave={(v) => onReport({ special: v })} align="left" /></td></tr>
