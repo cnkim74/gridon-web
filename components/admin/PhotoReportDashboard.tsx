@@ -111,7 +111,7 @@ function normLine(s: string) {
 function GgCell({ url, cap }: { url?: string; cap?: string }) {
   return (
     <div className="gg-cell">
-      {url ? <img src={url} alt={cap ?? ""} loading="lazy" /> : <div className="gg-empty">　</div>}
+      {url ? <img src={url} alt={cap ?? ""} /> : <div className="gg-empty">　</div>}
       <div className="gg-cap">{cap ?? "　"}</div>
     </div>
   );
@@ -242,7 +242,7 @@ function Row({ pair, photoMap }: { pair: Slot[]; photoMap: Record<string, string
         {pair.map((s) => (
           <td key={s.no} className="sd-cell">
             {photoMap[s.no]
-              ? <img src={photoMap[s.no]} alt={s.label} loading="lazy" />
+              ? <img src={photoMap[s.no]} alt={s.label} />
               : <span className="sd-empty">　</span>}
           </td>
         ))}
@@ -333,7 +333,24 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
   }, []);
 
   // 문서별 따로 인쇄 (공가조사표=가로 / 사진대지=세로)
-  function doPrint(kind: "gongga" | "sajin") {
+  const [preparing, setPreparing] = useState(false);
+  async function doPrint(kind: "gongga" | "sajin") {
+    // 인쇄 전에 해당 문서의 모든 사진 로딩 완료를 대기 (전체 인쇄 시 사진 누락 방지)
+    setPreparing(true);
+    const sel = kind === "gongga" ? ".gongga-doc img" : ".sajin-doc img";
+    const imgs = Array.from(document.querySelectorAll<HTMLImageElement>(`.sd-print ${sel}`));
+    await Promise.all(imgs.map((img) => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        const done = () => resolve();
+        img.addEventListener("load", done, { once: true });
+        img.addEventListener("error", done, { once: true });
+        // 안전장치: 8초 내 미로딩 시 진행
+        setTimeout(done, 8000);
+      });
+    }));
+    setPreparing(false);
+
     document.getElementById("print-page-style")?.remove();
     const style = document.createElement("style");
     style.id = "print-page-style";
@@ -437,7 +454,7 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
             {mode === "single" && selected && (
               <button className="btn btn--ghost btn--sm" type="button" onClick={() => openLine(selected)}>새로고침</button>
             )}
-            <button className="btn btn--sm" type="button" onClick={() => doPrint(doc)} disabled={loadingPhotos || loadingAll || !canPrint}>🖨 인쇄 · PDF 저장</button>
+            <button className="btn btn--sm" type="button" onClick={() => doPrint(doc)} disabled={loadingPhotos || loadingAll || preparing || !canPrint}>{preparing ? "이미지 준비 중…" : "🖨 인쇄 · PDF 저장"}</button>
           </div>
         )}
       </div>
