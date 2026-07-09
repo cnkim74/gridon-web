@@ -80,6 +80,7 @@ const NAV: [string, NavEntry[]][] = [
     ["equipment", "장비 관리현황", "/admin/equipment"],
   ]],
   ["결과보고서 작성", [
+    ["report-result", "맨홀 점검 결과보고서", "/admin/report/result"],
     ["report-gongga", "지중설비별 공가조사표", "/admin/report/gongga"],
     ["report-sajin", "맨홀점검사진대지", "/admin/report/sajin"],
   ]],

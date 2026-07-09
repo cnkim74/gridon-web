@@ -345,18 +345,69 @@
 .gg-grid .gg-cell{height:60mm}
 .gg-page--extra .gg-grid .gg-cell{height:60mm}
 
+/* ── 맨홀 점검 결과보고서 (표지·일반점검표·검사기록표, 세로 A4) ───────────── */
+.ri-page{width:210mm;min-height:296mm;background:#fff;color:#000;margin:0 auto 18px;padding:11mm 13mm;box-sizing:border-box;border:1px solid var(--line-2);box-shadow:0 2px 14px rgba(0,0,0,.06)}
+.ri-page table{border-collapse:collapse;width:100%}
+.ri-page td,.ri-page th{border:1px solid #000;font-size:12.5px;padding:1.5mm}
+.ri-page table + table{margin-top:-1px}   /* 인접 표 이음새 겹침 */
+.ri-page input{color:#000}
+.ri-sub{font-size:16px;font-weight:800;margin:3.5mm 0 1.5mm}
+
+/* 표지 */
+.cover-frame{border:2.5px solid #000;padding:6mm;height:274mm;box-sizing:border-box}
+.cover-inner{border:1px solid #000;height:100%;display:flex;flex-direction:column;align-items:center;padding:26mm 0 16mm;box-sizing:border-box}
+.cover-titlebox{border:1px solid #000;padding:9mm 16mm;margin-top:6mm;font-size:28px;font-weight:800;letter-spacing:.22em;text-indent:.22em}
+.cover-bar{width:62%;height:9px;background:#000;margin:6mm 0 0;position:relative;flex:none}
+.cover-bar::after{content:"";position:absolute;left:34%;width:32%;height:100%;background:#7dc98a}
+.cover-proj{font-size:16px;font-weight:800;margin-top:9mm}
+.cover-company{font-size:26px;font-weight:800;letter-spacing:.16em;text-indent:.16em;margin-top:auto}
+
+/* 일반점검표 */
+.gi-frame td{height:7mm}
+.gi-framel{width:16%}
+.gi-titlecell{text-align:center;font-size:19px;font-weight:800;letter-spacing:.04em}
+.gi-head td{text-align:center;height:7.5mm}
+.gi-head .lab{background:#f2f2f2;font-weight:700;width:19%}
+.gi-head .unit{width:7%;color:#333}
+.gi-head .unit-r{float:right;color:#333}
+.gi-list th{background:#f2f2f2;font-weight:700;text-align:center;height:6.5mm}
+.gi-list .cat{width:16%;text-align:center;font-weight:700;vertical-align:middle}
+.gi-list .res{width:15%;text-align:center}
+.gi-list .rmk{width:15%;text-align:center}
+.gi-list td.item{text-align:left;padding-left:3mm}
+.gi-list td.res{text-align:center}
+.gi-foot .lab{width:16%;font-weight:700;padding-left:3mm}
+.gi-foot .val{text-align:center}
+.gi-foot-empty{height:8mm}
+
+/* 검사기록표 */
+.rec-title{text-align:center;font-size:19px;font-weight:800;margin:0 0 2.5mm}
+.rec-topbar{font-size:13px;font-weight:700;margin-bottom:1.5mm}
+.rec-basic td{height:6mm;padding:1mm;text-align:center}
+.rec-basic .lab{background:#f2f2f2;font-weight:700;width:17%}
+.rec-detail th{background:#f2f2f2;font-weight:700;text-align:center;height:5.5mm;padding:1mm}
+.rec-detail td{text-align:center;height:4.4mm;padding:.4mm}
+.rec-detail .gubun{font-weight:700;vertical-align:middle;width:11%}
+.rec-detail .sub{width:26%;font-weight:600}
+.rec-detail .jc{width:8%}
+.rec-detail .temp{width:13%}
+.rec-detail .chk{font-weight:800}
+.rec-special{height:22mm;text-align:left!important;vertical-align:top;padding:3mm}
+
 @media print{
   html,body{background:#fff!important}
   body *{visibility:hidden}
   .sd-print, .sd-print *{visibility:visible}
   .sd-print{position:absolute;left:0;top:0;width:100%}
   /* 각 페이지는 '앞에서' 나눔 → 마지막 뒤 빈 페이지 없음. 첫 페이지 앞 나눔은 브라우저가 자동 무시 */
-  .sd-page,.gg-page{margin:0!important;border:none!important;box-shadow:none!important;width:100%!important;min-height:0!important;break-inside:avoid;break-before:page;page-break-before:always}
+  .sd-page,.gg-page,.ri-page{margin:0!important;border:none!important;box-shadow:none!important;width:100%!important;min-height:0!important;break-inside:avoid;break-before:page;page-break-before:always}
   .sd-print > :first-child, .sd-print > :first-child > :first-child{break-before:avoid;page-break-before:avoid}
   .sd-page{padding:10mm 12mm}
   .gg-page{padding:8mm 10mm}
+  .ri-page{padding:11mm 13mm}
   .no-print{display:none!important}
   /* 문서별 따로 인쇄: 인쇄 종류에 맞는 문서만 노출 */
-  body.printing-gongga .sajin-doc{display:none!important}
-  body.printing-sajin .gongga-doc{display:none!important}
+  body.printing-gongga .sajin-doc,body.printing-gongga .result-doc,body.printing-gongga .cover-page{display:none!important}
+  body.printing-sajin .gongga-doc,body.printing-sajin .result-doc,body.printing-sajin .cover-page{display:none!important}
+  body.printing-result .gongga-doc,body.printing-result .sajin-doc{display:none!important}
 }

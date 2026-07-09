@@ -33,6 +33,8 @@ const DEFAULT_PROJECT = "2026년 경남본부 배전맨홀 점검공사(차도)"
 const K_API = "drive_api_key";
 const K_FOLDER = "report_folder";
 const K_PROJECT = "report_project";
+const K_RESULT_DEFAULTS = "result_defaults"; // 결과보고서 프로젝트 공통정보 (JSON)
+const K_SHEET = "result_sheet"; // 결과보고서 점검 데이터 원본 구글시트 링크
 
 // ── Drive 헬퍼 ───────────────────────────────────────────────────────────────
 
@@ -106,6 +108,332 @@ function normLine(s: string) {
   return (s ?? "").normalize("NFC").replace(/\s+/g, "").toLowerCase();
 }
 
+// ── 결과보고서(4종 세트) 타입·기본값 ─────────────────────────────────────────
+
+// 프로젝트 공통정보 (app_settings 키: result_defaults, JSON 문자열)
+type ResultDefaults = {
+  coverProject: string;   // 표지 공사명
+  bonbu: string;          // 본부
+  saeopso: string;        // 사업소
+  installPos: string;     // 설치위치(도로)
+  inspectDate: string;    // 정기점검일 = 검사일자
+  inspectorOrg: string;   // 점검자 소속
+  inspectorName: string;  // 점검자 성명
+  checkerOrg: string;     // 검사자 소속
+  overall: string;        // 종합판정
+};
+const DEFAULT_RESULT: ResultDefaults = {
+  coverProject: "2026년 서부산지사 배전맨홀 청소점검공사",
+  bonbu: "부산울산본부", saeopso: "서부산지사", installPos: "도로",
+  inspectDate: "", inspectorOrg: "(주)승일", inspectorName: "배정만",
+  checkerOrg: "(주)승일", overall: "양호",
+};
+
+// 맨홀별 수동입력값 (line_overrides.report jsonb)
+type DlTemp = { a: string; b: string; c: string };
+type ReportOverride = {
+  lineTitle?: string;   // 선로명 (국제)
+  seq?: string;         // 선호번호 (M161)
+  installPos?: string;  // 설치위치
+  inspectDate?: string; // 정기점검일
+  floodHeight?: string; // 침수높이 (cm)
+  step?: string;        // 맨홀단차 (mm)
+  jointCount?: string;  // 접속재수량 (예: 6/3)
+  dlCount?: number;     // 활성 D/L 블록 수 (1~5)
+  temps?: DlTemp[];     // D/L별 접속재 온도
+  overall?: string;     // 종합판정
+  special?: string;     // 특이사항
+};
+const DL_MAX = 5;
+
+// 폴더/선로명 → 선로명(문자) + 선호번호(숫자 포함) 분리 ("국제M161" → 국제 / M161)
+function splitLine(name: string): { title: string; seq: string } {
+  const s = (name ?? "").normalize("NFC").trim();
+  const m = s.match(/^(.*?)\s*([A-Za-z]*\d[\w-]*)$/);
+  if (m) return { title: m[1].trim(), seq: m[2].trim() };
+  return { title: s, seq: "" };
+}
+
+// ── 구글 시트(점검 데이터 원본) 실시간 연동 ──────────────────────────────────
+type SheetReport = ReportOverride & { digital?: string };
+
+function extractSheetId(input: string): string {
+  const s = (input ?? "").trim();
+  const m = s.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(s)) return s;
+  return s;
+}
+
+// 셀 값 → 문자열 (엑셀 날짜 시리얼이면 YYYY-MM-DD로 변환)
+function cell(v: unknown): string { return v == null ? "" : String(v).trim(); }
+function asDate(v: unknown): string {
+  const s = cell(v); const n = Number(s);
+  if (s !== "" && Number.isFinite(n) && n >= 20000 && n <= 90000) {
+    const d = new Date(Date.UTC(1899, 11, 30) + n * 86400000);
+    const p = (x: number) => String(x).padStart(2, "0");
+    return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`;
+  }
+  return s;
+}
+function temp(v: unknown): string { const s = cell(v); return s ? (/[℃C]$/.test(s) ? s : `${s}℃`) : ""; }
+
+async function sheetTitles(id: string, key: string): Promise<string[]> {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}?key=${key}&fields=sheets.properties.title`;
+  const res = await fetch(url); const json = await res.json();
+  if (!res.ok) throw new Error(json?.error?.message || `시트 조회 오류 (${res.status})`);
+  return ((json.sheets as { properties: { title: string } }[]) ?? []).map((s) => s.properties.title);
+}
+async function sheetsBatch(id: string, key: string, ranges: string[]): Promise<{ range: string; values?: unknown[][] }[]> {
+  const qs = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values:batchGet?${qs}&majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&key=${key}`;
+  const res = await fetch(url); const json = await res.json();
+  if (!res.ok) throw new Error(json?.error?.message || `시트 값 오류 (${res.status})`);
+  return (json.valueRanges as { range: string; values?: unknown[][] }[]) ?? [];
+}
+function titleOfRange(range: string): string {
+  const m = range.match(/^'?([^'!]+)'?!/);
+  return m ? m[1] : range;
+}
+
+// 블록 시작행(제목 포함 행) 인덱스들
+function blockStarts(rows: unknown[][], keyword: string): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    if ((rows[i] ?? []).some((c) => cell(c).includes(keyword))) out.push(i);
+  }
+  return out;
+}
+const at = (rows: unknown[][], r: number, c: number): string => cell((rows[r] ?? [])[c]);
+
+// 맨홀점검표 시트 → key(정규화 선로명+선호번호)별 일반점검표 값
+function parseGi(rows: unknown[][], map: Record<string, SheetReport>) {
+  for (const s of blockStarts(rows, "일반점검표")) {
+    const line = at(rows, s + 2, 2), seq = at(rows, s + 3, 2);
+    if (!line && !seq) continue;
+    const k = normLine(line + seq);
+    map[k] = {
+      ...map[k], lineTitle: line || undefined, seq: seq || undefined,
+      installPos: at(rows, s + 2, 7) || undefined,
+      inspectDate: asDate((rows[s + 3] ?? [])[7]) || undefined,
+      floodHeight: at(rows, s + 4, 7) || undefined,
+      step: at(rows, s + 6, 2) || undefined,
+    };
+  }
+}
+
+// 정기검사시스템 시트 → key별 검사기록표 값(전산화번호·접속재수량·D/L 온도·종합판정·특이사항)
+function parseRec(rows: unknown[][], map: Record<string, SheetReport>) {
+  for (const s of blockStarts(rows, "검사기록표")) {
+    const line = at(rows, s + 3, 2), seq = at(rows, s + 3, 4);
+    if (!line && !seq) continue;
+    const k = normLine(line + seq);
+    const temps = [15, 20, 25, 30, 35].map((off) => ({
+      a: temp((rows[s + off] ?? [])[6]), b: temp((rows[s + off] ?? [])[7]), c: temp((rows[s + off] ?? [])[8]),
+    }));
+    const dlCount = temps.filter((t) => t.a || t.b || t.c).length;
+    map[k] = {
+      ...map[k], lineTitle: (map[k]?.lineTitle ?? line) || undefined, seq: (map[k]?.seq ?? seq) || undefined,
+      digital: at(rows, s + 3, 7) || undefined,
+      jointCount: at(rows, s + 4, 7) || undefined,
+      inspectDate: map[k]?.inspectDate ?? (asDate((rows[s + 5] ?? [])[2]) || undefined),
+      overall: at(rows, s + 6, 2) || undefined,
+      special: at(rows, s + 39, 1) || undefined,
+      temps, ...(dlCount > 0 ? { dlCount } : {}),
+    };
+  }
+}
+
+function parseInspectSheets(vrs: { range: string; values?: unknown[][] }[]): Record<string, SheetReport> {
+  const map: Record<string, SheetReport> = {};
+  for (const vr of vrs) {
+    const title = titleOfRange(vr.range); const rows = vr.values ?? [];
+    if (title.startsWith("맨홀점검표")) parseGi(rows, map);
+    else if (title.startsWith("정기검사시스템")) parseRec(rows, map);
+  }
+  return map;
+}
+
+// 밑줄 인라인 편집칸 (화면 입력 → blur 저장, 인쇄 시 값 그대로 출력)
+function REditable({ value, onSave, align = "center", bold, ph }: {
+  value: string; onSave: (v: string) => void; align?: "center" | "left"; bold?: boolean; ph?: string;
+}) {
+  const [v, setV] = useState(value);
+  const [prev, setPrev] = useState(value);
+  if (prev !== value) { setPrev(value); setV(value); } // 외부 value 변경 시 렌더 중 동기화(React 권장 패턴)
+  return (
+    <input
+      value={v} placeholder={ph}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={() => { if (v !== value) onSave(v.trim()); }}
+      style={{ width: "100%", border: "none", background: "transparent", font: "inherit",
+        fontWeight: bold ? 700 : undefined, textAlign: align, padding: "0 2px", color: "inherit", outline: "none" }}
+    />
+  );
+}
+
+type ReportFns = { ov: ReportOverride; rd: ResultDefaults; onReport: (patch: Partial<ReportOverride>) => void; onDigital: (v: string) => void };
+
+// ── 표지 (전체 1장) ──────────────────────────────────────────────────────────
+function CoverPage({ project }: { project: string }) {
+  return (
+    <div className="ri-page cover-page doc-font">
+      <div className="cover-frame">
+        <div className="cover-inner">
+          <div className="cover-titlebox">맨홀 및 핸드홀 조사표</div>
+          <div className="cover-bar" />
+          <div className="cover-proj">{project}</div>
+          <div className="cover-company">그리드온</div>
+          <div className="cover-bar" style={{ marginTop: "auto" }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 일반점검표 ────────────────────────────────────────────────────────────────
+const GI_STRUCT = [
+  "맨홀 윗뚜껑 매물, 돌출, 파손 및 포장상태",
+  "맨홀 속뚜껑 시건장치 유무 및 부식여부",
+  "산소, 탄산가스, 일산화탄소, 황화수소 농도상태",
+  "사다리, 발판볼트 설치상태 및 부식여부",
+  "벽면의 균열길이가 연속해서 가로로 있는지 여부",
+  "벽면에서 토사와 함께 물이 흐르는지 여부",
+  "벽면 콘크리트 파손 약 20%와 철근 노출 여부",
+  "방수장치 설치상태",
+];
+const GI_ELEC = [
+  "접지선 설치상태", "금구류(지지대, 행거) 변형여부", "접속개소 과열여부(측정결과 입력)",
+  "접속부분의 변형(레진의 누출, 테이프 이탈)", "케이블 바닥에 방치여부",
+  "케이블 방재 및 시행상태(관통부, 케이블)", "케이블 외피 손상유무", "케이블 표면온도 이상유무",
+  "케이블 접속함의 지지상태", "케이블 이상장력 유무", "관로 인입부분 굴곡개소의 케이블 지지여부",
+  "허용곡률반경 유지여부", "각종 표시찰 설치 및 이상유무",
+];
+
+function GeneralInspectPage({ derived, ov, rd, onReport }: { derived: { title: string; seq: string } } & ReportFns) {
+  const title = ov.lineTitle ?? derived.title;
+  const seq = ov.seq ?? derived.seq;
+  return (
+    <div className="ri-page gi-page doc-font">
+      <table className="gi-frame">
+        <tbody>
+          <tr><td rowSpan={2} className="gi-framel" /><td className="gi-titlecell">맨·핸드홀 내 전력설비 일반점검표</td></tr>
+          <tr><td /></tr>
+        </tbody>
+      </table>
+      <table className="gi-head">
+        <tbody>
+          <tr><td className="lab">선로명</td><td><REditable value={title} onSave={(v) => onReport({ lineTitle: v })} /></td>
+              <td className="lab">설치위치</td><td colSpan={2}><REditable value={ov.installPos ?? rd.installPos} onSave={(v) => onReport({ installPos: v })} /></td></tr>
+          <tr><td className="lab">선호번호</td><td><REditable value={seq} onSave={(v) => onReport({ seq: v })} /></td>
+              <td className="lab">정기점검일</td><td colSpan={2}><REditable value={ov.inspectDate ?? rd.inspectDate} onSave={(v) => onReport({ inspectDate: v })} bold /></td></tr>
+          <tr><td className="lab">점검자 소속</td><td>{rd.inspectorOrg}</td>
+              <td className="lab">침수높이</td><td><REditable value={ov.floodHeight ?? ""} onSave={(v) => onReport({ floodHeight: v })} /></td><td className="unit">cm</td></tr>
+          <tr><td className="lab">점검자 성명</td><td>{rd.inspectorName}</td>
+              <td className="lab">청소여부</td><td colSpan={2}>-</td></tr>
+          <tr><td className="lab">맨홀단차</td><td><REditable value={ov.step ?? "0"} onSave={(v) => onReport({ step: v })} /><span className="unit-r">mm</span></td>
+              <td className="lab">청소사유</td><td colSpan={2}>-</td></tr>
+        </tbody>
+      </table>
+
+      <div className="ri-sub">□ 점검 세부리스트</div>
+      <table className="gi-list">
+        <tbody>
+          <tr><th className="cat">점검 항목</th><th>점검 사항</th><th className="res">점검 결과</th><th className="rmk">비고</th></tr>
+          {GI_STRUCT.map((t, i) => (
+            <tr key={t}>{i === 0 && <td className="cat" rowSpan={GI_STRUCT.length}>구조물설비</td>}
+              <td className="item">{t}</td><td className="res">양호</td><td /></tr>
+          ))}
+          {GI_ELEC.map((t, i) => (
+            <tr key={t}>{i === 0 && <td className="cat" rowSpan={GI_ELEC.length}>전기시설물<br />(케이블 및 기타설비)</td>}
+              <td className="item">{t}</td><td className="res">양호</td><td>{t.startsWith("접속개소") ? "℃" : ""}</td></tr>
+          ))}
+        </tbody>
+      </table>
+      <table className="gi-foot">
+        <tbody>
+          <tr><td className="lab">(기타사항)</td><td className="val">양호</td></tr>
+          <tr><td className="lab">(보강방법)</td><td className="val gi-foot-empty" /></tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── 검사기록표 ────────────────────────────────────────────────────────────────
+const REC_ROWS = ["케이블, 접속재", "접속재 온도", "관로구 방수장치", "금구류", "선로표시찰 상태"];
+
+function DlBlock({ active, temps, onTemp }: { active: boolean; temps: DlTemp; onTemp: (t: DlTemp) => void }) {
+  return (
+    <>
+      {REC_ROWS.map((label, r) => {
+        const isTemp = r === 1, isMark = r === 4; // 선로표시찰=부적합, 나머지 적합
+        return (
+          <tr key={r}>
+            {r === 0 && <td className="gubun" rowSpan={5}>{active ? "-D/L" : ""}</td>}
+            <td className="sub">{label}</td>
+            <td className="chk">{active && !isMark ? "✓" : ""}</td>
+            <td className="chk">{active && isMark ? "✓" : ""}</td>
+            {isTemp ? (
+              <>
+                <td className="temp">{active ? <REditable value={temps.a} onSave={(v) => onTemp({ ...temps, a: v })} /> : ""}</td>
+                <td className="temp">{active ? <REditable value={temps.b} onSave={(v) => onTemp({ ...temps, b: v })} /> : ""}</td>
+                <td className="temp">{active ? <REditable value={temps.c} onSave={(v) => onTemp({ ...temps, c: v })} /> : ""}</td>
+              </>
+            ) : (<><td /><td /><td /></>)}
+          </tr>
+        );
+      })}
+    </>
+  );
+}
+
+function RecordPage({ derived, ov, rd, onReport, onDigital, digital }: { derived: { title: string; seq: string }; digital: string } & ReportFns) {
+  const seqFull = `${ov.lineTitle ?? derived.title} ${ov.seq ?? derived.seq}`.trim();
+  const dlCount = ov.dlCount ?? 3;
+  const temps = ov.temps ?? [];
+  const tempAt = (i: number): DlTemp => temps[i] ?? { a: "", b: "", c: "" };
+  const setTemp = (i: number, t: DlTemp) => {
+    const next = Array.from({ length: DL_MAX }, (_, k) => temps[k] ?? { a: "", b: "", c: "" });
+    next[i] = t;
+    onReport({ temps: next });
+  };
+  return (
+    <div className="ri-page rec-page doc-font">
+      <div className="rec-title doc-title">맨·핸드홀 내 전력설비 검사기록표</div>
+      <div className="rec-topbar">□ 기본사항　　날씨:　　　　온도　　　　습도</div>
+      <table className="rec-basic">
+        <tbody>
+          <tr><td className="lab">본부</td><td>{rd.bonbu}</td><td className="lab">사업소</td><td>{rd.saeopso}</td></tr>
+          <tr><td className="lab">선호번호</td><td>{seqFull}</td><td className="lab">전산화번호</td><td><REditable value={digital} onSave={onDigital} /></td></tr>
+          <tr><td className="lab">대상설비</td><td /><td className="lab">접속재수량</td><td><REditable value={ov.jointCount ?? ""} onSave={(v) => onReport({ jointCount: v })} /></td></tr>
+          <tr><td className="lab">검사일자</td><td>{ov.inspectDate ?? rd.inspectDate}</td><td className="lab">점검자소속</td><td>{rd.inspectorOrg}</td></tr>
+          <tr><td className="lab">종합판정</td><td><REditable value={ov.overall ?? rd.overall} onSave={(v) => onReport({ overall: v })} /></td><td className="lab">점검자</td><td>{rd.inspectorName}</td></tr>
+          <tr><td className="lab">검사자 소속</td><td>{rd.checkerOrg}</td><td className="lab">검사자</td><td>(인)</td></tr>
+        </tbody>
+      </table>
+
+      <div className="ri-sub">□ 항목별 세부 검사결과</div>
+      <table className="rec-detail">
+        <tbody>
+          <tr><th rowSpan={2} className="gubun">구분</th><th rowSpan={2} className="sub">세부항목</th>
+              <th colSpan={2}>판정결과(√)</th><th colSpan={3}>비 고</th></tr>
+          <tr><th className="jc">적합</th><th className="jc">부적합</th><th className="temp">A상</th><th className="temp">B상</th><th className="temp">C상</th></tr>
+          {["구조물 상태(균열, 누수)", "유독가스 발생유무", "접지선 상태"].map((t, i) => (
+            <tr key={t}>{i === 0 && <td className="gubun" rowSpan={3}>구조물</td>}
+              <td className="sub">{t}</td><td className="chk">✓</td><td /><td /><td /><td /></tr>
+          ))}
+          {Array.from({ length: DL_MAX }).map((_, i) => (
+            <DlBlock key={i} active={i < dlCount} temps={tempAt(i)} onTemp={(t) => setTemp(i, t)} />
+          ))}
+          <tr><td className="gubun">특이사항</td><td className="rec-special" colSpan={6}>
+            <REditable value={ov.special ?? ""} onSave={(v) => onReport({ special: v })} align="left" /></td></tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── 지중설비별 공가조사 사진대지 (가로 A4, 2×4 그리드) ───────────────────────
 
 function GgCell({ url, cap }: { url?: string; cap?: string }) {
@@ -120,7 +448,8 @@ function GgCell({ url, cap }: { url?: string; cap?: string }) {
 // 밑줄 스타일의 편집 가능한 입력칸 (화면에서 입력, 인쇄 시 텍스트로 출력)
 function EditableField({ value, onSave, width }: { value: string; onSave: (v: string) => void; width: number }) {
   const [v, setV] = useState(value);
-  useEffect(() => { setV(value); }, [value]);
+  const [prev, setPrev] = useState(value);
+  if (prev !== value) { setPrev(value); setV(value); } // 외부 value 변경 시 렌더 중 동기화(React 권장 패턴)
   return (
     <input
       value={v}
@@ -184,9 +513,10 @@ function GonggaExtraPage({ lineName, digital, equipType, onOverride, urls }: { l
   );
 }
 
-// 한 선로 출력: doc 종류에 따라 공가조사표(가로) 또는 사진대지(세로)만
-function LineReport({ doc, project, lineName, digital, equipType, onOverride, photoMap, extras }: {
-  doc: "gongga" | "sajin"; project: string; lineName: string; digital: string; equipType: string; onOverride: OverrideFn; photoMap: Record<string, string>; extras: string[];
+// 한 선로 출력: doc 종류에 따라 공가조사표(가로) / 사진대지(세로) / 결과보고서(4종)
+function LineReport({ doc, project, lineName, digital, equipType, onOverride, photoMap, extras, rd, report, onReport }: {
+  doc: "gongga" | "sajin" | "result"; project: string; lineName: string; digital: string; equipType: string; onOverride: OverrideFn; photoMap: Record<string, string>; extras: string[];
+  rd?: ResultDefaults; report?: ReportOverride; onReport?: (patch: Partial<ReportOverride>) => void;
 }) {
   const name = lineName === "(이 폴더)" ? "" : lineName;
   if (doc === "gongga") {
@@ -200,6 +530,20 @@ function LineReport({ doc, project, lineName, digital, equipType, onOverride, ph
         {extraPages.map((urls, pi) => (
           <GonggaExtraPage key={pi} lineName={name} digital={digital} equipType={equipType} onOverride={onOverride} urls={urls} />
         ))}
+      </div>
+    );
+  }
+  if (doc === "result") {
+    const defaults = rd ?? DEFAULT_RESULT;
+    const ov = report ?? {};
+    const derived = splitLine(name);
+    const fns: ReportFns = { ov, rd: defaults, onReport: onReport ?? (() => {}), onDigital: (v) => onOverride("digital_number", v) };
+    return (
+      <div className="result-doc">
+        <GeneralInspectPage derived={derived} {...fns} />
+        <RecordPage derived={derived} digital={digital} {...fns} />
+        <SajinPage project={project} lineName={name} slots={PAGE1} photoMap={photoMap} />
+        <SajinPage project={project} lineName={name} slots={PAGE2} photoMap={photoMap} />
       </div>
     );
   }
@@ -258,15 +602,24 @@ function Row({ pair, photoMap }: { pair: Slot[]; photoMap: Record<string, string
 
 type Line = { id: string; name: string };
 
-export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" }) {
-  const DOC_TITLE = doc === "gongga" ? "지중설비별 공가조사표" : "맨홀점검사진대지";
+export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" | "result" }) {
+  const DOC_TITLE = doc === "gongga" ? "지중설비별 공가조사표" : doc === "result" ? "맨홀 점검 결과보고서" : "맨홀점검사진대지";
   const DOC_DESC = doc === "gongga"
     ? "드라이브 폴더의 점검사진을 실시간으로 읽어 선로별 공가조사표(가로) PDF 생성"
+    : doc === "result"
+    ? "표지·일반점검표·검사기록표·사진대지 2장을 맨홀별로 묶어 일괄 인쇄 (공통정보는 기본값, 실측값은 미리보기에서 직접 입력)"
     : "드라이브 폴더의 점검사진을 실시간으로 읽어 맨홀점검사진대지(세로) PDF 생성";
   const [apiKey, setApiKey] = useState("");
   const [folder, setFolder] = useState("");
   const [project, setProject] = useState(DEFAULT_PROJECT);
+  const [rd, setRd] = useState<ResultDefaults>(DEFAULT_RESULT);
   const [savedOk, setSavedOk] = useState(false);
+
+  // 결과보고서: 구글시트(점검 데이터 원본) 실시간 연동
+  const [sheetUrl, setSheetUrl] = useState("");
+  const [sheetMap, setSheetMap] = useState<Record<string, SheetReport>>({});
+  const [sheetLoading, setSheetLoading] = useState(false);
+  const [sheetErr, setSheetErr] = useState<string | null>(null);
 
   const [lines, setLines] = useState<Line[]>([]);
   const [loadingLines, setLoadingLines] = useState(false);
@@ -285,13 +638,24 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
 
   // 전산화번호 맵 (정규화 선로명 → 전산화번호)
   const [digitalMap, setDigitalMap] = useState<Record<string, string>>({});
-  // 선로별 수동 입력값 (전산화번호·설비종류)
-  const [overrides, setOverrides] = useState<Record<string, { digital_number?: string; equip_type?: string }>>({});
-  const digitalOf = (lineName: string) => overrides[lineName]?.digital_number || digitalMap[normLine(lineName)] || "";
+  // 선로별 수동 입력값 (전산화번호·설비종류·결과보고서 실측값)
+  const [overrides, setOverrides] = useState<Record<string, { digital_number?: string; equip_type?: string; report?: ReportOverride }>>({});
+  const digitalOf = (lineName: string) => overrides[lineName]?.digital_number || sheetMap[normLine(lineName)]?.digital || digitalMap[normLine(lineName)] || "";
   const equipTypeOf = (lineName: string) => overrides[lineName]?.equip_type || "";
+  // 시트 값(base) 위에 수동입력(override)을 덮어씀 → 수동 수정이 우선
+  const reportOf = (lineName: string): ReportOverride => {
+    const base = sheetMap[normLine(lineName)] ?? {};
+    const manual = overrides[lineName]?.report ?? {};
+    return { ...base, ...manual };
+  };
   async function saveOverride(lineName: string, field: "digital_number" | "equip_type", value: string) {
     setOverrides((prev) => ({ ...prev, [lineName]: { ...prev[lineName], [field]: value } }));
     await sba.from("line_overrides").upsert({ line_name: lineName, [field]: value, updated_at: new Date().toISOString() });
+  }
+  async function saveReport(lineName: string, patch: Partial<ReportOverride>) {
+    const next = { ...(overrides[lineName]?.report ?? {}), ...patch };
+    setOverrides((prev) => ({ ...prev, [lineName]: { ...prev[lineName], report: next } }));
+    await sba.from("line_overrides").upsert({ line_name: lineName, report: next, updated_at: new Date().toISOString() });
   }
 
   // 설정 로드 (Supabase) → 값이 있으면 선로 목록 자동 로드 + 전산화번호 맵 로드
@@ -302,7 +666,11 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
       const get = (k: string) => rows.find((r) => r.key === k)?.value ?? "";
       const k = get(K_API), f = get(K_FOLDER), p = get(K_PROJECT) || DEFAULT_PROJECT;
       setApiKey(k); setFolder(f); setProject(p);
+      const rdRaw = get(K_RESULT_DEFAULTS);
+      if (rdRaw) { try { setRd({ ...DEFAULT_RESULT, ...JSON.parse(rdRaw) }); } catch { /* ignore */ } }
+      const sh = get(K_SHEET); setSheetUrl(sh);
       if (k.trim() && f.trim()) loadLinesWith(k, f);
+      if (doc === "result" && k.trim() && sh.trim()) loadSheet(k, sh);
     })();
     // 전산화번호 매핑 (manhole_works)
     (async () => {
@@ -325,19 +693,26 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
     (async () => {
       const { data }: SbaRes = await sba.from("line_overrides").select("line_name,digital_number,equip_type");
       const rows = (data as { line_name: string; digital_number: string | null; equip_type: string | null }[]) ?? [];
-      const o: Record<string, { digital_number?: string; equip_type?: string }> = {};
+      const o: Record<string, { digital_number?: string; equip_type?: string; report?: ReportOverride }> = {};
       for (const r of rows) o[r.line_name] = { digital_number: r.digital_number ?? undefined, equip_type: r.equip_type ?? undefined };
+      // report는 신규 jsonb 컬럼 — 마이그레이션 전이면 select가 실패하므로 별도 조회 후 있으면 병합
+      const rep: SbaRes = await sba.from("line_overrides").select("line_name,report");
+      if (!rep.error) {
+        for (const r of (rep.data as { line_name: string; report: ReportOverride | null }[]) ?? []) {
+          o[r.line_name] = { ...o[r.line_name], report: r.report ?? undefined };
+        }
+      }
       setOverrides(o);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 문서별 따로 인쇄 (공가조사표=가로 / 사진대지=세로)
+  // 문서별 따로 인쇄 (공가조사표=가로 / 사진대지·결과보고서=세로)
   const [preparing, setPreparing] = useState(false);
-  async function doPrint(kind: "gongga" | "sajin") {
+  async function doPrint(kind: "gongga" | "sajin" | "result") {
     // 인쇄 전에 해당 문서의 모든 사진 로딩 완료를 대기 (전체 인쇄 시 사진 누락 방지)
     setPreparing(true);
-    const sel = kind === "gongga" ? ".gongga-doc img" : ".sajin-doc img";
+    const sel = kind === "gongga" ? ".gongga-doc img" : kind === "result" ? ".result-doc img" : ".sajin-doc img";
     const imgs = Array.from(document.querySelectorAll<HTMLImageElement>(`.sd-print ${sel}`));
     await Promise.all(imgs.map((img) => {
       if (img.complete && img.naturalWidth > 0) return Promise.resolve();
@@ -354,11 +729,11 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
     document.getElementById("print-page-style")?.remove();
     const style = document.createElement("style");
     style.id = "print-page-style";
-    style.textContent = `@page{size:A4 ${kind === "gongga" ? "landscape" : "portrait"};margin:8mm}`;
+    style.textContent = `@page{size:A4 ${kind === "gongga" ? "landscape" : "portrait"};margin:${kind === "result" ? "0" : "8mm"}}`;
     document.head.appendChild(style);
     document.body.classList.add(`printing-${kind}`);
     const cleanup = () => {
-      document.body.classList.remove("printing-gongga", "printing-sajin");
+      document.body.classList.remove("printing-gongga", "printing-sajin", "printing-result");
       document.getElementById("print-page-style")?.remove();
       window.removeEventListener("afterprint", cleanup);
     };
@@ -371,11 +746,34 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
       { key: K_FOLDER, value: folder.trim() },
       { key: K_PROJECT, value: project.trim() || DEFAULT_PROJECT },
     ];
+    if (doc === "result") {
+      rows.push({ key: K_RESULT_DEFAULTS, value: JSON.stringify(rd) });
+      rows.push({ key: K_SHEET, value: sheetUrl.trim() });
+    }
     const { error }: SbaRes = await sba.from("app_settings").upsert(rows);
     if (error) { setErr("설정 저장 실패: " + (error as { message: string }).message); return; }
     setSavedOk(true);
     setTimeout(() => setSavedOk(false), 1800);
+    if (doc === "result" && apiKey.trim() && sheetUrl.trim()) loadSheet(apiKey, sheetUrl);
   };
+
+  // 구글시트(점검 데이터 원본) 로드 → 맨홀별 자동채움 맵
+  async function loadSheet(key: string, sheetInput: string) {
+    const id = extractSheetId(sheetInput);
+    if (!key.trim() || !id) { setSheetErr("API 키와 구글시트 링크를 먼저 입력·저장하세요."); return; }
+    setSheetLoading(true); setSheetErr(null);
+    try {
+      const titles = await sheetTitles(id, key.trim());
+      const wanted = titles.filter((t) => t.startsWith("맨홀점검표") || t.startsWith("정기검사시스템"));
+      if (wanted.length === 0) { setSheetErr("시트에서 '맨홀점검표_*' · '정기검사시스템_*' 탭을 찾지 못했습니다."); setSheetMap({}); return; }
+      const vrs = await sheetsBatch(id, key.trim(), wanted);
+      setSheetMap(parseInspectSheets(vrs));
+    } catch (e) {
+      setSheetErr((e as Error).message + " (구글 클라우드에서 Google Sheets API가 켜져 있고, 시트가 ‘링크가 있는 모든 사용자·뷰어’로 공개돼야 합니다.)");
+    } finally {
+      setSheetLoading(false);
+    }
+  }
 
   // 선로 목록 로드 (key/folder를 인자로 받아 자동 로드에도 사용)
   async function loadLinesWith(key: string, folderInput: string) {
@@ -471,6 +869,32 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
             <label>공사명 (사진대지 머리말)</label>
             <input className="input" value={project} onChange={(e) => setProject(e.target.value)} />
           </div>
+          {doc === "result" && (
+            <div style={{ border: "1px solid var(--line-2)", borderRadius: 8, padding: "14px 16px", display: "grid", gap: 10 }}>
+              <div className="field">
+                <label>점검 데이터 구글시트 링크 <span style={{ fontWeight: 400, color: "var(--muted)" }}>· 맨홀점검표·정기검사시스템 값을 실시간으로 읽어 자동 채움</span></label>
+                <input className="input" placeholder="https://docs.google.com/spreadsheets/d/..." value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} />
+                <div style={{ fontSize: 12, color: sheetErr ? "#b3261e" : "var(--muted)", marginTop: 4 }}>
+                  {sheetLoading ? "시트 불러오는 중…" : sheetErr ? `⚠ ${sheetErr}` : Object.keys(sheetMap).length > 0 ? `✓ 시트에서 맨홀 ${Object.keys(sheetMap).length}개 데이터 연동됨` : "저장하면 시트를 읽어 자동 채웁니다. (Google Sheets API 활성화 + 시트 링크공개 필요)"}
+                </div>
+              </div>
+              <div style={{ fontWeight: 700, fontSize: 13 }}>결과보고서 공통정보 <span style={{ fontWeight: 400, color: "var(--muted)" }}>· 시트에 없는 값의 기본값 (맨홀별 값은 미리보기에서 직접 수정 가능)</span></div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                {([
+                  ["coverProject", "표지 공사명"], ["inspectDate", "정기점검일·검사일자"],
+                  ["bonbu", "본부"], ["saeopso", "사업소"],
+                  ["inspectorOrg", "점검자 소속"], ["inspectorName", "점검자 성명"],
+                  ["checkerOrg", "검사자 소속"], ["installPos", "설치위치"],
+                  ["overall", "종합판정"],
+                ] as [keyof ResultDefaults, string][]).map(([key, label]) => (
+                  <div className="field" key={key}>
+                    <label>{label}</label>
+                    <input className="input" value={rd[key]} onChange={(e) => setRd((prev) => ({ ...prev, [key]: e.target.value }))} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button className="btn btn--sm" type="button" onClick={saveSettings}>저장</button>
             <button className="btn btn--ghost btn--sm" type="button" onClick={() => loadLinesWith(apiKey, folder)}>선로 목록 불러오기</button>
@@ -530,12 +954,14 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
                     <strong style={{ color: "var(--ink)" }}>{selected.name}</strong> · 매칭 {matched}/12장
                     {photoMap["11"] ? "" : " · 11번(열화상) 비움"}
                     {extras.length > 0 ? ` · 기타(공) ${extras.length}장` : ""}
-                    {doc === "gongga" ? " · 공가조사표(가로)" : " · 사진대지 2장(세로)"}
+                    {doc === "gongga" ? " · 공가조사표(가로)" : doc === "result" ? " · 결과보고서 4종(표지+점검표2+사진대지2)" : " · 사진대지 2장(세로)"}
+                    {doc === "result" && (sheetMap[normLine(selected.name)] ? " · 📋 시트 자동채움됨" : " · 시트 데이터 없음(직접 입력)")}
                   </>
                 )}
               </div>
               <div className="sd-print">
-                <LineReport doc={doc} project={project} lineName={selected.name} digital={digitalOf(selected.name)} equipType={equipTypeOf(selected.name)} onOverride={(f, v) => saveOverride(selected.name, f, v)} photoMap={photoMap} extras={extras} />
+                {doc === "result" && <CoverPage project={rd.coverProject} />}
+                <LineReport doc={doc} project={project} lineName={selected.name} digital={digitalOf(selected.name)} equipType={equipTypeOf(selected.name)} onOverride={(f, v) => saveOverride(selected.name, f, v)} photoMap={photoMap} extras={extras} rd={rd} report={reportOf(selected.name)} onReport={(patch) => saveReport(selected.name, patch)} />
               </div>
             </>
           )}
@@ -552,9 +978,10 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
                   전체 <strong style={{ color: "var(--ink)" }}>{allReports.length}개</strong> 선로 · “🖨 인쇄·PDF 저장”을 누르면 {DOC_TITLE}가 한 번에 출력됩니다.
                 </div>
                 <div className="sd-print">
+                  {doc === "result" && <CoverPage project={rd.coverProject} />}
                   {allReports.map((r) => (
                     <Fragment key={r.line.id}>
-                      <LineReport doc={doc} project={project} lineName={r.line.name} digital={digitalOf(r.line.name)} equipType={equipTypeOf(r.line.name)} onOverride={(f, v) => saveOverride(r.line.name, f, v)} photoMap={r.photoMap} extras={r.extras} />
+                      <LineReport doc={doc} project={project} lineName={r.line.name} digital={digitalOf(r.line.name)} equipType={equipTypeOf(r.line.name)} onOverride={(f, v) => saveOverride(r.line.name, f, v)} photoMap={r.photoMap} extras={r.extras} rd={rd} report={reportOf(r.line.name)} onReport={(patch) => saveReport(r.line.name, patch)} />
                     </Fragment>
                   ))}
                 </div>
