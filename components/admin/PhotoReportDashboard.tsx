@@ -351,7 +351,7 @@ function GeneralInspectPage({ derived, ov, rd, onReport }: { derived: { title: s
               <td className="lab">침수높이</td><td><REditable value={ov.floodHeight ?? ""} onSave={(v) => onReport({ floodHeight: v })} /></td><td className="unit">cm</td></tr>
           <tr><td className="lab">점검자 성명</td><td>{rd.inspectorName}</td>
               <td className="lab">청소여부</td><td colSpan={2}>-</td></tr>
-          <tr><td className="lab">맨홀단차</td><td><REditable value={ov.step ?? "0"} onSave={(v) => onReport({ step: v })} /><span className="unit-r">mm</span></td>
+          <tr><td className="lab">맨홀단차</td><td className="step-cell"><REditable value={ov.step ?? "0"} onSave={(v) => onReport({ step: v })} w="46px" /><span className="unit-in">mm</span></td>
               <td className="lab">청소사유</td><td colSpan={2}>-</td></tr>
         </tbody>
       </table>
