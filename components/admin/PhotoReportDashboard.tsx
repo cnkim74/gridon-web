@@ -11,7 +11,7 @@ type SbaRes = { data: unknown; error: { message: string } | null };
 type Slot = { no: string; label: string };
 
 const PAGE1: Slot[] = [
-  { no: "01", label: "번호찰" },
+  { no: "01", label: "표시찰" },
   { no: "02", label: "전경" },
   { no: "03", label: "단차" },
   { no: "04", label: "침수높이" },
