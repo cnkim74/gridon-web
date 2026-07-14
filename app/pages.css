@@ -363,9 +363,10 @@
 .cover-company{font-size:26px;font-weight:800;letter-spacing:.16em;text-indent:.16em;margin-top:auto}
 
 /* 일반점검표 */
-.gi-frame td{height:7mm}
+.gi-frame td{height:13mm}
 .gi-framel{width:16%}
 .gi-titlecell{text-align:center;font-size:19px;font-weight:800;letter-spacing:.04em}
+.gi-list td.heat-rmk{text-align:right;white-space:nowrap;padding-right:2mm}
 .gi-head td{text-align:center;height:7.5mm}
 .gi-head .lab{background:#f2f2f2;font-weight:700;width:19%}
 .gi-head .unit{width:7%;color:#333}
@@ -385,6 +386,7 @@
 .rec-topbar{font-size:13px;font-weight:700;margin-bottom:1.5mm}
 .rec-basic td{height:6mm;padding:1mm;text-align:center}
 .rec-basic .lab{background:#f2f2f2;font-weight:700;width:17%}
+.rec-basic .sign-cell{text-align:right;padding-right:5mm}
 .rec-detail th{background:#f2f2f2;font-weight:700;text-align:center;height:5.5mm;padding:1mm}
 .rec-detail td{text-align:center;height:4.4mm;padding:.4mm}
 .rec-detail .gubun{font-weight:700;vertical-align:middle;width:11%}

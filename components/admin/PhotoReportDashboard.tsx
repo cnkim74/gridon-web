@@ -23,8 +23,8 @@ const PAGE2: Slot[] = [
   { no: "08", label: "2번 벽면(동)" },
   { no: "09", label: "3번 벽면(북)" },
   { no: "10", label: "4번 벽면(남)" },
-  { no: "11", label: "열화상 측정" },
-  { no: "12", label: "접지측정" },
+  { no: "12", label: "접지측정" },     // 파일번호 12
+  { no: "TH1", label: "열화상 측정" }, // 파일명 #1 (#2 이상은 추가 페이지)
 ];
 
 const DEFAULT_PROJECT = "2026년 경남본부 배전맨홀 점검공사(차도)";
@@ -85,14 +85,22 @@ function gongNumOf(name: string): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
-// 폴더 파일 목록 → 01~12 사진 매핑 + 기타(공N) 목록
-// (01~12, 공N 외의 파일명은 임의 참고용이므로 불러오지 않음)
+// 파일명이 "#1","#2"처럼 #+숫자로 시작하면 그 번호(열화상), 아니면 null
+function thermalNumOf(name: string): number | null {
+  const m = name.match(/^\s*#\s*0*(\d+)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// 폴더 파일 목록 → 01~12 사진 매핑 + 기타(공N) + 열화상(#N: TH키) 목록
+// (01~12, 공N, #N 외의 파일명은 임의 참고용이므로 불러오지 않음)
 function buildPhotoMap(files: DriveFile[]): { map: Record<string, string>; extras: string[] } {
   const map: Record<string, string> = {};
   const gongs: { n: number; url: string }[] = [];
   for (const f of files.filter(isImage)) {
     // 맥에서 올린 한글 파일명은 유니코드 분해형(NFD)이라 NFC로 정규화 후 매칭
     const nm = (f.name ?? "").normalize("NFC");
+    const th = thermalNumOf(nm);
+    if (th !== null) { if (!map[`TH${th}`]) map[`TH${th}`] = driveImg(f.id); continue; }
     const s = slotNumOf(nm);
     if (s) { if (!map[s]) map[s] = driveImg(f.id); continue; }
     const g = gongNumOf(nm);
@@ -101,6 +109,17 @@ function buildPhotoMap(files: DriveFile[]): { map: Record<string, string>; extra
   }
   gongs.sort((a, b) => a.n - b.n);
   return { map, extras: gongs.map((e) => e.url) };
+}
+
+// photoMap에서 열화상(TH2 이상) URL을 번호순으로 (열화상 추가 페이지용)
+function thermalExtras(photoMap: Record<string, string>): string[] {
+  return Object.keys(photoMap)
+    .map((k) => /^TH(\d+)$/.exec(k))
+    .filter((m): m is RegExpExecArray => !!m)
+    .map((m) => ({ n: parseInt(m[1], 10), url: photoMap[m[0]] }))
+    .filter((x) => x.n >= 2)
+    .sort((a, b) => a.n - b.n)
+    .map((x) => x.url);
 }
 
 // 선로명 정규화 (유니코드 NFC + 공백 제거) — 폴더명(NFD) ↔ DB line_name(NFC) 매칭용
@@ -143,6 +162,7 @@ type ReportOverride = {
   temps?: DlTemp[];     // D/L별 접속재 온도
   overall?: string;     // 종합판정
   special?: string;     // 특이사항
+  heatTemp?: string;    // 일반점검표 접속개소 과열여부 비고 온도(℃)
   marks?: Record<string, "부">; // 판정결과: 기본 적합, 부적합인 행만 저장 (rowId → "부")
 };
 const DL_MAX = 5;
@@ -256,8 +276,8 @@ function parseInspectSheets(vrs: { range: string; values?: unknown[][] }[]): Rec
 }
 
 // 밑줄 인라인 편집칸 (화면 입력 → blur 저장, 인쇄 시 값 그대로 출력)
-function REditable({ value, onSave, align = "center", bold, ph }: {
-  value: string; onSave: (v: string) => void; align?: "center" | "left"; bold?: boolean; ph?: string;
+function REditable({ value, onSave, align = "center", bold, ph, w }: {
+  value: string; onSave: (v: string) => void; align?: "center" | "left" | "right"; bold?: boolean; ph?: string; w?: string;
 }) {
   const [v, setV] = useState(value);
   const [prev, setPrev] = useState(value);
@@ -267,7 +287,7 @@ function REditable({ value, onSave, align = "center", bold, ph }: {
       value={v} placeholder={ph}
       onChange={(e) => setV(e.target.value)}
       onBlur={() => { if (v !== value) onSave(v.trim()); }}
-      style={{ width: "100%", border: "none", background: "transparent", font: "inherit",
+      style={{ width: w ?? "100%", border: "none", background: "transparent", font: "inherit",
         fontWeight: bold ? 700 : undefined, textAlign: align, padding: "0 2px", color: "inherit", outline: "none" }}
     />
   );
@@ -318,8 +338,7 @@ function GeneralInspectPage({ derived, ov, rd, onReport }: { derived: { title: s
     <div className="ri-page gi-page doc-font">
       <table className="gi-frame">
         <tbody>
-          <tr><td rowSpan={2} className="gi-framel" /><td className="gi-titlecell">맨·핸드홀 내 전력설비 일반점검표</td></tr>
-          <tr><td /></tr>
+          <tr><td className="gi-titlecell">맨·핸드홀 내 전력설비 일반점검표</td></tr>
         </tbody>
       </table>
       <table className="gi-head">
@@ -347,7 +366,12 @@ function GeneralInspectPage({ derived, ov, rd, onReport }: { derived: { title: s
           ))}
           {GI_ELEC.map((t, i) => (
             <tr key={t}>{i === 0 && <td className="cat" rowSpan={GI_ELEC.length}>전기시설물<br />(케이블 및 기타설비)</td>}
-              <td className="item">{t}</td><td className="res">양호</td><td>{t.startsWith("접속개소") ? "℃" : ""}</td></tr>
+              <td className="item">{t}</td><td className="res">양호</td>
+              <td className={t.startsWith("접속개소") ? "heat-rmk" : ""}>
+                {t.startsWith("접속개소")
+                  ? <><REditable value={ov.heatTemp ?? ""} onSave={(v) => onReport({ heatTemp: v })} align="right" w="72%" />℃</>
+                  : ""}
+              </td></tr>
           ))}
         </tbody>
       </table>
@@ -430,7 +454,7 @@ function RecordPage({ derived, ov, rd, onReport, onDigital, digital }: { derived
           <tr><td className="lab">대상설비</td><td /><td className="lab">접속재수량</td><td><REditable value={ov.jointCount ?? ""} onSave={(v) => onReport({ jointCount: v })} /></td></tr>
           <tr><td className="lab">검사일자</td><td>{ov.inspectDate ?? rd.inspectDate}</td><td className="lab">점검자소속</td><td>{rd.inspectorOrg}</td></tr>
           <tr><td className="lab">종합판정</td><td><REditable value={ov.overall ?? rd.overall} onSave={(v) => onReport({ overall: v })} /></td><td className="lab">점검자</td><td>{rd.inspectorName}</td></tr>
-          <tr><td className="lab">검사자 소속</td><td>{rd.checkerOrg}</td><td className="lab">검사자</td><td>(인)</td></tr>
+          <tr><td className="lab">검사자 소속</td><td>{rd.checkerOrg}</td><td className="lab">검사자</td><td className="sign-cell">(인)</td></tr>
         </tbody>
       </table>
 
@@ -570,6 +594,7 @@ function LineReport({ doc, project, lineName, digital, equipType, onOverride, ph
         <RecordPage derived={derived} digital={digital} {...fns} />
         <SajinPage project={project} lineName={name} slots={PAGE1} photoMap={photoMap} />
         <SajinPage project={project} lineName={name} slots={PAGE2} photoMap={photoMap} />
+        <ThermalPages project={project} lineName={name} urls={thermalExtras(photoMap)} />
       </div>
     );
   }
@@ -577,6 +602,7 @@ function LineReport({ doc, project, lineName, digital, equipType, onOverride, ph
     <div className="sajin-doc">
       <SajinPage project={project} lineName={name} slots={PAGE1} photoMap={photoMap} />
       <SajinPage project={project} lineName={name} slots={PAGE2} photoMap={photoMap} />
+      <ThermalPages project={project} lineName={name} urls={thermalExtras(photoMap)} />
     </div>
   );
 }
@@ -620,6 +646,37 @@ function Row({ pair, photoMap }: { pair: Slot[]; photoMap: Record<string, string
       <tr>
         {pair.map((s) => <td key={s.no} className="sd-cap">{s.label}</td>)}
       </tr>
+    </>
+  );
+}
+
+// 열화상 추가 페이지: #2 이상을 한 장에 6칸(2×3)씩 "열화상 측정" 이름으로 반복 출력
+function ThermalPages({ project, lineName, urls }: { project: string; lineName: string; urls: string[] }) {
+  if (urls.length === 0) return null;
+  const pages: string[][] = [];
+  for (let i = 0; i < urls.length; i += 6) pages.push(urls.slice(i, i + 6));
+  return (
+    <>
+      {pages.map((chunk, pi) => (
+        <div className="sd-page doc-font" key={pi}>
+          <div className="sd-title doc-title">맨 홀 점 검 사 진 대 지</div>
+          <div className="sd-head"><span>공사명　{project}</span><span>맨홀명　{lineName}</span></div>
+          <table className="sd-grid">
+            <tbody>
+              {[0, 2, 4].map((r) => (
+                <Fragment key={r}>
+                  <tr>{[chunk[r], chunk[r + 1]].map((u, ci) => (
+                    <td key={ci} className="sd-cell">{u ? <img src={u} alt="열화상 측정" /> : <span className="sd-empty">　</span>}</td>
+                  ))}</tr>
+                  <tr>{[chunk[r], chunk[r + 1]].map((u, ci) => (
+                    <td key={ci} className="sd-cap">{u ? "열화상 측정" : "　"}</td>
+                  ))}</tr>
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
     </>
   );
 }
@@ -864,6 +921,7 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
   }
 
   const matched = Object.keys(photoMap).length;
+  const thermalCount = Object.keys(photoMap).filter((k) => /^TH\d+$/.test(k)).length;
   const canPrint = mode === "all" ? allReports.length > 0 : matched > 0;
 
   return (
@@ -929,7 +987,7 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
           <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, margin: 0 }}>
             · 경남본부(상위) 폴더 링크를 붙여넣으면 하위 선로 폴더가 자동으로 목록에 표시됩니다.<br />
             · 드라이브에서 해당 폴더를 “링크가 있는 모든 사용자 · 뷰어”로 공개해야 합니다.<br />
-            · 사진 파일명은 매뉴얼대로 <strong>01~12</strong>로 시작해야 자동 배치됩니다. (11번 열화상은 비워둠, 공N은 제외)
+            · 사진 파일명은 매뉴얼대로 <strong>01~12</strong>로 시작해야 자동 배치됩니다. (접지측정=12, 열화상=<strong>#1</strong>·#2 이상은 추가 페이지, 기타=공N)
           </p>
         </div>
       </details>
@@ -977,8 +1035,8 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
               <div className="no-print" style={{ marginBottom: 10, fontSize: 13, color: "var(--muted)" }}>
                 {loadingPhotos ? "사진 불러오는 중…" : (
                   <>
-                    <strong style={{ color: "var(--ink)" }}>{selected.name}</strong> · 매칭 {matched}/12장
-                    {photoMap["11"] ? "" : " · 11번(열화상) 비움"}
+                    <strong style={{ color: "var(--ink)" }}>{selected.name}</strong> · 매칭 {matched}장
+                    {thermalCount > 0 ? ` · 열화상(#) ${thermalCount}장` : ""}
                     {extras.length > 0 ? ` · 기타(공) ${extras.length}장` : ""}
                     {doc === "gongga" ? " · 공가조사표(가로)" : doc === "result" ? " · 결과보고서 4종(표지+점검표2+사진대지2)" : " · 사진대지 2장(세로)"}
                     {doc === "result" && (sheetMap[normLine(selected.name)] ? " · 📋 시트 자동채움됨" : " · 시트 데이터 없음(직접 입력)")}
