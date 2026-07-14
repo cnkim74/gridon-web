@@ -132,6 +132,7 @@ function normLine(s: string) {
 // 프로젝트 공통정보 (app_settings 키: result_defaults, JSON 문자열)
 type ResultDefaults = {
   coverProject: string;   // 표지 공사명
+  coverCompany: string;   // 표지 회사명
   bonbu: string;          // 본부
   saeopso: string;        // 사업소
   installPos: string;     // 설치위치(도로)
@@ -143,6 +144,7 @@ type ResultDefaults = {
 };
 const DEFAULT_RESULT: ResultDefaults = {
   coverProject: "2026년 서부산지사 배전맨홀 청소점검공사",
+  coverCompany: "(주)승일",
   bonbu: "부산울산본부", saeopso: "서부산지사", installPos: "도로",
   inspectDate: "", inspectorOrg: "(주)승일", inspectorName: "배정만",
   checkerOrg: "(주)승일", overall: "양호",
@@ -297,7 +299,7 @@ function REditable({ value, onSave, align = "center", bold, ph, w }: {
 type ReportFns = { ov: ReportOverride; rd: ResultDefaults; onReport: (patch: Partial<ReportOverride>) => void; onDigital: (v: string) => void };
 
 // ── 표지 (전체 1장) ──────────────────────────────────────────────────────────
-function CoverPage({ project }: { project: string }) {
+function CoverPage({ project, company }: { project: string; company: string }) {
   return (
     <div className="ri-page cover-page doc-font">
       <div className="cover-frame">
@@ -305,7 +307,7 @@ function CoverPage({ project }: { project: string }) {
           <div className="cover-titlebox">맨홀 및 핸드홀 조사표</div>
           <div className="cover-bar" />
           <div className="cover-proj">{project}</div>
-          <div className="cover-company">그리드온</div>
+          <div className="cover-company">{company}</div>
           <div className="cover-bar" style={{ marginTop: "auto" }} />
         </div>
       </div>
@@ -966,7 +968,7 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
               <div style={{ fontWeight: 700, fontSize: 13 }}>결과보고서 공통정보 <span style={{ fontWeight: 400, color: "var(--muted)" }}>· 시트에 없는 값의 기본값 (맨홀별 값은 미리보기에서 직접 수정 가능)</span></div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 {([
-                  ["coverProject", "표지 공사명"], ["inspectDate", "정기점검일·검사일자"],
+                  ["coverProject", "표지 공사명"], ["coverCompany", "표지 회사명"], ["inspectDate", "정기점검일·검사일자"],
                   ["bonbu", "본부"], ["saeopso", "사업소"],
                   ["inspectorOrg", "점검자 소속"], ["inspectorName", "점검자 성명"],
                   ["checkerOrg", "검사자 소속"], ["installPos", "설치위치"],
@@ -1045,7 +1047,7 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
                 )}
               </div>
               <div className="sd-print">
-                {doc === "result" && <CoverPage project={rd.coverProject} />}
+                {doc === "result" && <CoverPage project={rd.coverProject} company={rd.coverCompany} />}
                 <LineReport doc={doc} project={project} lineName={selected.name} digital={digitalOf(selected.name)} equipType={equipTypeOf(selected.name)} onOverride={(f, v) => saveOverride(selected.name, f, v)} photoMap={photoMap} extras={extras} rd={rd} report={reportOf(selected.name)} onReport={(patch) => saveReport(selected.name, patch)} />
               </div>
             </>
@@ -1063,7 +1065,7 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
                   전체 <strong style={{ color: "var(--ink)" }}>{allReports.length}개</strong> 선로 · “🖨 인쇄·PDF 저장”을 누르면 {DOC_TITLE}가 한 번에 출력됩니다.
                 </div>
                 <div className="sd-print">
-                  {doc === "result" && <CoverPage project={rd.coverProject} />}
+                  {doc === "result" && <CoverPage project={rd.coverProject} company={rd.coverCompany} />}
                   {allReports.map((r) => (
                     <Fragment key={r.line.id}>
                       <LineReport doc={doc} project={project} lineName={r.line.name} digital={digitalOf(r.line.name)} equipType={equipTypeOf(r.line.name)} onOverride={(f, v) => saveOverride(r.line.name, f, v)} photoMap={r.photoMap} extras={r.extras} rd={rd} report={reportOf(r.line.name)} onReport={(patch) => saveReport(r.line.name, patch)} />
