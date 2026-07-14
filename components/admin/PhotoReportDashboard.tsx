@@ -427,7 +427,7 @@ function DlBlock({ idx, name, temps, onName, onTemp, marks, onMark }: {
         return (
           <tr key={r}>
             {r === 0 && <td className="gubun dl-gubun" rowSpan={5}>
-              <REditable value={name} onSave={onName} w="34px" /><span className="dl-suffix">D/L</span>
+              <REditable value={name || String(idx + 1)} onSave={onName} w="34px" /><span className="dl-suffix">D/L</span>
             </td>}
             <td className="sub">{label}</td>
             <JudgeCells active bad={bad} onSet={(b) => onMark(rowId, b)} />
@@ -437,7 +437,7 @@ function DlBlock({ idx, name, temps, onName, onTemp, marks, onMark }: {
                 <td className="temp"><REditable value={temps.b} onSave={(v) => onTemp({ ...temps, b: v })} /></td>
                 <td className="temp"><REditable value={temps.c} onSave={(v) => onTemp({ ...temps, c: v })} /></td>
               </>
-            ) : (<><td /><td /><td /></>)}
+            ) : (<td colSpan={3} />)}
           </tr>
         );
       })}
@@ -489,7 +489,7 @@ function RecordPage({ derived, ov, rd, onReport, onDigital, digital }: { derived
       <tr key={t}>{i === 0 && <td className="gubun" rowSpan={3}>구조물</td>}
         <td className="sub">{t}</td>
         <JudgeCells active bad={bad} onSet={(b) => setMark(rowId, b)} />
-        <td /><td /><td /></tr>
+        <td colSpan={3} /></tr>
     );
   });
   const specialRow = (
