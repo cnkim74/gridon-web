@@ -161,15 +161,14 @@ type ReportOverride = {
   cleanYn?: string;     // 청소여부 (기본 미실시)
   step?: string;        // 맨홀단차 (mm)
   jointCount?: string;  // 접속재수량 (예: 6/3)
-  dlCount?: number;     // 활성 D/L 블록 수 (1~5)
+  dlCount?: number;     // D/L 블록 수 (기본 5, 초과 가능)
+  dlNames?: string[];   // D/L별 구분 접두어 (OO D/L의 OO)
   temps?: DlTemp[];     // D/L별 접속재 온도
   overall?: string;     // 종합판정
   special?: string;     // 특이사항
   heatTemp?: string;    // 일반점검표 접속개소 과열여부 비고 온도(℃)
   marks?: Record<string, "부">; // 판정결과: 기본 적합, 부적합인 행만 저장 (rowId → "부")
 };
-const DL_MAX = 5;
-
 // 폴더/선로명 → 선로명(문자) + 선호번호(숫자 포함) 분리 ("국제M161" → 국제 / M161)
 function splitLine(name: string): { title: string; seq: string } {
   const s = (name ?? "").normalize("NFC").trim();
@@ -246,24 +245,36 @@ function parseGi(rows: unknown[][], map: Record<string, SheetReport>) {
   }
 }
 
+// "OO D/L" 구분 라벨에서 OO(접두어)만 추출 ("-D/L"·"  D/L" → "", "국제 D/L" → "국제")
+function dlPrefix(label: string): string {
+  return cell(label).replace(/D\s*\/?\s*L\s*$/i, "").replace(/^[\s\-·・]+/, "").trim();
+}
+
 // 정기검사시스템 시트 → key별 검사기록표 값(전산화번호·접속재수량·D/L 온도·종합판정·특이사항)
+// D/L 블록은 개수 가변(케이블·접속재 행이 반복되는 만큼) → 특이사항 전까지 동적 파싱
 function parseRec(rows: unknown[][], map: Record<string, SheetReport>) {
   for (const s of blockStarts(rows, "검사기록표")) {
     const line = at(rows, s + 3, 2), seq = at(rows, s + 3, 4);
     if (!line && !seq) continue;
     const k = normLine(line + seq);
-    const temps = [15, 20, 25, 30, 35].map((off) => ({
-      a: temp((rows[s + off] ?? [])[6]), b: temp((rows[s + off] ?? [])[7]), c: temp((rows[s + off] ?? [])[8]),
-    }));
-    const dlCount = temps.filter((t) => t.a || t.b || t.c).length;
+    const temps: DlTemp[] = []; const dlNames: string[] = [];
+    let n = 0;
+    for (; n < 40; n++) {
+      const base = 14 + 5 * n; // n번째 D/L 블록의 '케이블, 접속재' 행
+      if (!at(rows, s + base, 1).includes("케이블")) break;
+      dlNames.push(dlPrefix(at(rows, s + base, 0)));
+      const tRow = rows[s + base + 1] ?? []; // '접속재 온도' 행 (A/B/C상)
+      temps.push({ a: temp(tRow[6]), b: temp(tRow[7]), c: temp(tRow[8]) });
+    }
+    const special = at(rows, s + 14 + 5 * n, 1); // 블록들 다음 = 특이사항 내용
     map[k] = {
       ...map[k], lineTitle: (map[k]?.lineTitle ?? line) || undefined, seq: (map[k]?.seq ?? seq) || undefined,
       digital: at(rows, s + 3, 7) || undefined,
       jointCount: at(rows, s + 4, 7) || undefined,
       inspectDate: map[k]?.inspectDate ?? (asDate((rows[s + 5] ?? [])[2]) || undefined),
       overall: at(rows, s + 6, 2) || undefined,
-      special: at(rows, s + 39, 1) || undefined,
-      temps, ...(dlCount > 0 ? { dlCount } : {}),
+      special: special || undefined,
+      temps, dlNames, ...(n > 0 ? { dlCount: n } : {}),
     };
   }
 }
@@ -402,8 +413,10 @@ function JudgeCells({ active, bad, onSet }: { active: boolean; bad: boolean; onS
   );
 }
 
-function DlBlock({ idx, active, temps, onTemp, marks, onMark }: {
-  idx: number; active: boolean; temps: DlTemp; onTemp: (t: DlTemp) => void; marks: Record<string, "부">; onMark: (rowId: string, bad: boolean) => void;
+// D/L 한 블록(5행). 구분칸은 "OO D/L"(OO 편집 가능), 판정·온도 모두 입력 가능
+function DlBlock({ idx, name, temps, onName, onTemp, marks, onMark }: {
+  idx: number; name: string; temps: DlTemp; onName: (v: string) => void; onTemp: (t: DlTemp) => void;
+  marks: Record<string, "부">; onMark: (rowId: string, bad: boolean) => void;
 }) {
   return (
     <>
@@ -413,14 +426,16 @@ function DlBlock({ idx, active, temps, onTemp, marks, onMark }: {
         const bad = marks[rowId] === "부";
         return (
           <tr key={r}>
-            {r === 0 && <td className="gubun" rowSpan={5}>{active ? "-D/L" : ""}</td>}
+            {r === 0 && <td className="gubun dl-gubun" rowSpan={5}>
+              <REditable value={name} onSave={onName} w="34px" /><span className="dl-suffix">D/L</span>
+            </td>}
             <td className="sub">{label}</td>
-            <JudgeCells active={active} bad={bad} onSet={(b) => onMark(rowId, b)} />
+            <JudgeCells active bad={bad} onSet={(b) => onMark(rowId, b)} />
             {isTemp ? (
               <>
-                <td className="temp">{active ? <REditable value={temps.a} onSave={(v) => onTemp({ ...temps, a: v })} /> : ""}</td>
-                <td className="temp">{active ? <REditable value={temps.b} onSave={(v) => onTemp({ ...temps, b: v })} /> : ""}</td>
-                <td className="temp">{active ? <REditable value={temps.c} onSave={(v) => onTemp({ ...temps, c: v })} /> : ""}</td>
+                <td className="temp"><REditable value={temps.a} onSave={(v) => onTemp({ ...temps, a: v })} /></td>
+                <td className="temp"><REditable value={temps.b} onSave={(v) => onTemp({ ...temps, b: v })} /></td>
+                <td className="temp"><REditable value={temps.c} onSave={(v) => onTemp({ ...temps, c: v })} /></td>
               </>
             ) : (<><td /><td /><td /></>)}
           </tr>
@@ -430,60 +445,112 @@ function DlBlock({ idx, active, temps, onTemp, marks, onMark }: {
   );
 }
 
+// 검사기록표 세부검사표 헤더(2행)
+function RecDetailHead() {
+  return (
+    <>
+      <tr><th rowSpan={2} className="gubun">구분</th><th rowSpan={2} className="sub">세부항목</th>
+          <th colSpan={2}>판정결과(√)</th><th colSpan={3}>비 고</th></tr>
+      <tr><th className="jc">적합</th><th className="jc">부적합</th><th className="temp">A상</th><th className="temp">B상</th><th className="temp">C상</th></tr>
+    </>
+  );
+}
+
+const REC_P1_BLOCKS = 5; // 1페이지에 담는 D/L 블록 수
+const REC_CONT_BLOCKS = 8; // 이어붙임 페이지당 D/L 블록 수
+
 function RecordPage({ derived, ov, rd, onReport, onDigital, digital }: { derived: { title: string; seq: string }; digital: string } & ReportFns) {
   const seqFull = `${ov.lineTitle ?? derived.title} ${ov.seq ?? derived.seq}`.trim();
-  const dlCount = ov.dlCount ?? 3;
+  const dlCount = Math.max(1, ov.dlCount ?? 5);
   const temps = ov.temps ?? [];
-  const tempAt = (i: number): DlTemp => temps[i] ?? { a: "", b: "", c: "" };
-  const setTemp = (i: number, t: DlTemp) => {
-    const next = Array.from({ length: DL_MAX }, (_, k) => temps[k] ?? { a: "", b: "", c: "" });
-    next[i] = t;
-    onReport({ temps: next });
-  };
+  const dlNames = ov.dlNames ?? [];
   const marks = ov.marks ?? {};
+  const setCount = (n: number) => onReport({ dlCount: Math.max(1, Math.min(30, n)) });
+  const setTemp = (i: number, t: DlTemp) => {
+    const next = Array.from({ length: dlCount }, (_, k) => temps[k] ?? { a: "", b: "", c: "" });
+    next[i] = t; onReport({ temps: next });
+  };
+  const setName = (i: number, v: string) => {
+    const next = Array.from({ length: dlCount }, (_, k) => dlNames[k] ?? "");
+    next[i] = v; onReport({ dlNames: next });
+  };
   const setMark = (rowId: string, bad: boolean) => {
     const next = { ...marks };
     if (bad) next[rowId] = "부"; else delete next[rowId];
     onReport({ marks: next });
   };
-  return (
-    <div className="ri-page rec-page doc-font">
-      <div className="rec-title doc-title">맨·핸드홀 내 전력설비 검사기록표</div>
-      <div className="rec-topbar">□ 기본사항　　날씨:　　　　온도　　　　습도</div>
-      <table className="rec-basic">
-        <tbody>
-          <tr><td className="lab">본부</td><td>{rd.bonbu}</td><td className="lab">사업소</td><td>{rd.saeopso}</td></tr>
-          <tr><td className="lab">선호번호</td><td>{seqFull}</td><td className="lab">전산화번호</td><td><REditable value={digital} onSave={onDigital} /></td></tr>
-          <tr><td className="lab">대상설비</td><td /><td className="lab">접속재수량</td><td><REditable value={ov.jointCount ?? ""} onSave={(v) => onReport({ jointCount: v })} /></td></tr>
-          <tr><td className="lab">검사일자</td><td>{ov.inspectDate ?? rd.inspectDate}</td><td className="lab">점검자소속</td><td>{rd.inspectorOrg}</td></tr>
-          <tr><td className="lab">종합판정</td><td><REditable value={ov.overall ?? rd.overall} onSave={(v) => onReport({ overall: v })} /></td><td className="lab">점검자</td><td>{rd.inspectorName}</td></tr>
-          <tr><td className="lab">검사자 소속</td><td>{rd.checkerOrg}</td><td className="lab">검사자</td><td className="sign-cell">(인)</td></tr>
-        </tbody>
-      </table>
+  const block = (i: number) => (
+    <DlBlock key={i} idx={i} name={dlNames[i] ?? ""} temps={temps[i] ?? { a: "", b: "", c: "" }}
+      onName={(v) => setName(i, v)} onTemp={(t) => setTemp(i, t)} marks={marks} onMark={setMark} />
+  );
+  const structRows = ["구조물 상태(균열, 누수)", "유독가스 발생유무", "접지선 상태"].map((t, i) => {
+    const rowId = `s${i}`; const bad = marks[rowId] === "부";
+    return (
+      <tr key={t}>{i === 0 && <td className="gubun" rowSpan={3}>구조물</td>}
+        <td className="sub">{t}</td>
+        <JudgeCells active bad={bad} onSet={(b) => setMark(rowId, b)} />
+        <td /><td /><td /></tr>
+    );
+  });
+  const specialRow = (
+    <tr><td className="gubun">특이사항</td><td className="rec-special" colSpan={6}>
+      <REditable value={ov.special ?? ""} onSave={(v) => onReport({ special: v })} align="left" /></td></tr>
+  );
 
-      <div className="ri-sub">□ 항목별 세부 검사결과</div>
-      <table className="rec-detail">
-        <tbody>
-          <tr><th rowSpan={2} className="gubun">구분</th><th rowSpan={2} className="sub">세부항목</th>
-              <th colSpan={2}>판정결과(√)</th><th colSpan={3}>비 고</th></tr>
-          <tr><th className="jc">적합</th><th className="jc">부적합</th><th className="temp">A상</th><th className="temp">B상</th><th className="temp">C상</th></tr>
-          {["구조물 상태(균열, 누수)", "유독가스 발생유무", "접지선 상태"].map((t, i) => {
-            const rowId = `s${i}`; const bad = marks[rowId] === "부";
-            return (
-              <tr key={t}>{i === 0 && <td className="gubun" rowSpan={3}>구조물</td>}
-                <td className="sub">{t}</td>
-                <JudgeCells active bad={bad} onSet={(b) => setMark(rowId, b)} />
-                <td /><td /><td /></tr>
-            );
-          })}
-          {Array.from({ length: DL_MAX }).map((_, i) => (
-            <DlBlock key={i} idx={i} active={i < dlCount} temps={tempAt(i)} onTemp={(t) => setTemp(i, t)} marks={marks} onMark={setMark} />
-          ))}
-          <tr><td className="gubun">특이사항</td><td className="rec-special" colSpan={6}>
-            <REditable value={ov.special ?? ""} onSave={(v) => onReport({ special: v })} align="left" /></td></tr>
-        </tbody>
-      </table>
-    </div>
+  const p1 = Math.min(dlCount, REC_P1_BLOCKS);
+  const contChunks: [number, number][] = [];
+  for (let start = REC_P1_BLOCKS; start < dlCount; start += REC_CONT_BLOCKS) {
+    contChunks.push([start, Math.min(start + REC_CONT_BLOCKS, dlCount)]);
+  }
+
+  return (
+    <>
+      <div className="ri-page rec-page doc-font">
+        <div className="rec-title doc-title">맨·핸드홀 내 전력설비 검사기록표</div>
+        <div className="no-print rec-dl-ctrl">
+          D/L 블록 수:
+          <button type="button" onClick={() => setCount(dlCount - 1)}>−</button>
+          <b>{dlCount}</b>
+          <button type="button" onClick={() => setCount(dlCount + 1)}>＋</button>
+          <span>기본 5 · 시트값 자동 · 5개 초과 시 다음 장에 이어 출력</span>
+        </div>
+        <div className="rec-topbar">□ 기본사항　　날씨:　　　　온도　　　　습도</div>
+        <table className="rec-basic">
+          <tbody>
+            <tr><td className="lab">본부</td><td>{rd.bonbu}</td><td className="lab">사업소</td><td>{rd.saeopso}</td></tr>
+            <tr><td className="lab">선호번호</td><td>{seqFull}</td><td className="lab">전산화번호</td><td><REditable value={digital} onSave={onDigital} /></td></tr>
+            <tr><td className="lab">대상설비</td><td /><td className="lab">접속재수량</td><td><REditable value={ov.jointCount ?? ""} onSave={(v) => onReport({ jointCount: v })} /></td></tr>
+            <tr><td className="lab">검사일자</td><td>{ov.inspectDate ?? rd.inspectDate}</td><td className="lab">점검자소속</td><td>{rd.inspectorOrg}</td></tr>
+            <tr><td className="lab">종합판정</td><td><REditable value={ov.overall ?? rd.overall} onSave={(v) => onReport({ overall: v })} /></td><td className="lab">점검자</td><td>{rd.inspectorName}</td></tr>
+            <tr><td className="lab">검사자 소속</td><td>{rd.checkerOrg}</td><td className="lab">검사자</td><td className="sign-cell">(인)</td></tr>
+          </tbody>
+        </table>
+
+        <div className="ri-sub">□ 항목별 세부 검사결과</div>
+        <table className="rec-detail">
+          <tbody>
+            <RecDetailHead />
+            {structRows}
+            {Array.from({ length: p1 }, (_, i) => block(i))}
+            {contChunks.length === 0 && specialRow}
+          </tbody>
+        </table>
+      </div>
+
+      {contChunks.map(([start, end], ci) => (
+        <div className="ri-page rec-page doc-font" key={ci}>
+          <div className="rec-title doc-title">맨·핸드홀 내 전력설비 검사기록표 (계속 {ci + 2})</div>
+          <div className="ri-sub">□ 항목별 세부 검사결과 (계속)</div>
+          <table className="rec-detail">
+            <tbody>
+              <RecDetailHead />
+              {Array.from({ length: end - start }, (_, j) => block(start + j))}
+              {ci === contChunks.length - 1 && specialRow}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </>
   );
 }
 

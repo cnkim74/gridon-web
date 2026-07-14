@@ -398,6 +398,13 @@
 .rec-detail .chk{font-weight:800}
 .rec-detail .jc-click{cursor:pointer}
 .rec-detail .jc-click:hover{background:#eef}
+.rec-detail .dl-gubun{white-space:nowrap}
+.rec-detail .dl-gubun input{width:34px;text-align:center}
+.rec-detail .dl-gubun .dl-suffix{margin-left:1px}
+.rec-dl-ctrl{display:flex;align-items:center;gap:8px;font-size:12px;color:#555;margin:2mm 0 3mm}
+.rec-dl-ctrl button{width:24px;height:24px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer;font-size:15px;line-height:1}
+.rec-dl-ctrl b{min-width:18px;text-align:center}
+.rec-dl-ctrl span{color:#999}
 .rec-special{height:22mm;text-align:left!important;vertical-align:top;padding:3mm}
 
 @media print{
