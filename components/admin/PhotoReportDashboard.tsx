@@ -156,6 +156,7 @@ type ReportOverride = {
   installPos?: string;  // 설치위치
   inspectDate?: string; // 정기점검일
   floodHeight?: string; // 침수높이 (cm)
+  cleanYn?: string;     // 청소여부 (기본 미실시)
   step?: string;        // 맨홀단차 (mm)
   jointCount?: string;  // 접속재수량 (예: 6/3)
   dlCount?: number;     // 활성 D/L 블록 수 (1~5)
@@ -350,7 +351,7 @@ function GeneralInspectPage({ derived, ov, rd, onReport }: { derived: { title: s
           <tr><td className="lab">점검자 소속</td><td>{rd.inspectorOrg}</td>
               <td className="lab">침수높이</td><td><REditable value={ov.floodHeight ?? ""} onSave={(v) => onReport({ floodHeight: v })} /></td><td className="unit">cm</td></tr>
           <tr><td className="lab">점검자 성명</td><td>{rd.inspectorName}</td>
-              <td className="lab">청소여부</td><td colSpan={2}>-</td></tr>
+              <td className="lab">청소여부</td><td colSpan={2}><REditable value={ov.cleanYn ?? "미실시"} onSave={(v) => onReport({ cleanYn: v })} /></td></tr>
           <tr><td className="lab">맨홀단차</td><td className="step-cell"><REditable value={ov.step ?? "0"} onSave={(v) => onReport({ step: v })} w="46px" /><span className="unit-in">mm</span></td>
               <td className="lab">청소사유</td><td colSpan={2}>-</td></tr>
         </tbody>
