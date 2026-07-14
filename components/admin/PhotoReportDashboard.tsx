@@ -349,7 +349,7 @@ function GeneralInspectPage({ derived, ov, rd, onReport }: { derived: { title: s
           <tr><td className="lab">선로명</td><td><REditable value={title} onSave={(v) => onReport({ lineTitle: v })} /></td>
               <td className="lab">설치위치</td><td colSpan={2}><REditable value={ov.installPos ?? rd.installPos} onSave={(v) => onReport({ installPos: v })} /></td></tr>
           <tr><td className="lab">선호번호</td><td><REditable value={seq} onSave={(v) => onReport({ seq: v })} /></td>
-              <td className="lab">정기점검일</td><td colSpan={2}><REditable value={ov.inspectDate ?? rd.inspectDate} onSave={(v) => onReport({ inspectDate: v })} bold /></td></tr>
+              <td className="lab">정기점검일</td><td colSpan={2} style={{ fontWeight: 700 }}>{ov.inspectDate ?? rd.inspectDate}</td></tr>
           <tr><td className="lab">점검자 소속</td><td>{rd.inspectorOrg}</td>
               <td className="lab">침수높이</td><td><REditable value={ov.floodHeight ?? ""} onSave={(v) => onReport({ floodHeight: v })} /></td><td className="unit">cm</td></tr>
           <tr><td className="lab">점검자 성명</td><td>{rd.inspectorName}</td>
