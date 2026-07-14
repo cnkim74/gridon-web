@@ -365,7 +365,7 @@
 /* 일반점검표 */
 .gi-frame td{height:13mm}
 .gi-framel{width:16%}
-.gi-titlecell{text-align:center;font-size:19px;font-weight:800;letter-spacing:.04em}
+.gi-page .gi-titlecell{text-align:center;font-size:19px;font-weight:800;letter-spacing:.04em}
 .gi-list td.heat-rmk{text-align:right;white-space:nowrap;padding-right:2mm}
 .gi-head td{text-align:center;height:7.5mm}
 .gi-head .lab{background:#f2f2f2;font-weight:700;width:19%}
