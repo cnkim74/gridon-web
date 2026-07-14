@@ -1,0 +1,8 @@
+# Cloudflare Pages 캐시 정책
+# 해시가 붙은 정적 자산은 영구 캐시(파일명이 바뀌면 자동으로 새로 받음)
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 그 외(HTML 등)는 매 요청마다 최신 확인 → 배포 후 일반 새로고침만으로 즉시 반영
+/*
+  Cache-Control: public, max-age=0, must-revalidate
