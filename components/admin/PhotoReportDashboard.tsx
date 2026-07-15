@@ -359,7 +359,7 @@ function GeneralInspectPage({ derived, ov, rd, onReport }: { derived: { title: s
   // 비고: 행별 편집(불량 시 기입)
   const giNotes = ov.giNotes ?? {};
   const setNote = (id: string, v: string) => onReport({ giNotes: { ...giNotes, [id]: v } });
-  const noteCell = (id: string) => <td className="gi-rmk"><REditable value={giNotes[id] ?? ""} onSave={(v) => setNote(id, v)} align="left" /></td>;
+  const noteCell = (id: string) => <td className="gi-rmk"><REditable value={giNotes[id] ?? ""} onSave={(v) => setNote(id, v)} /></td>;
   return (
     <div className="ri-page gi-page doc-font">
       <table className="gi-frame">
