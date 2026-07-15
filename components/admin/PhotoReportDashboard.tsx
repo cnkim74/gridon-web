@@ -199,7 +199,9 @@ function asDate(v: unknown): string {
   }
   return s;
 }
-function temp(v: unknown): string { const s = cell(v); return s ? (/[℃C]$/.test(s) ? s : `${s}℃`) : ""; }
+// 온도값은 숫자만 저장(℃ 단위는 화면/인쇄에서 별도 표시). 기존 ℃ 붙은 값도 숫자만 추출
+function temp(v: unknown): string { return cell(v).replace(/\s*[℃°C]\s*$/i, "").trim(); }
+const stripDeg = (s: string) => (s ?? "").replace(/\s*[℃°C]\s*$/i, "").trim();
 
 async function sheetTitles(id: string, key: string): Promise<string[]> {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}?key=${key}&fields=sheets.properties.title`;
@@ -433,9 +435,9 @@ function DlBlock({ idx, name, temps, onName, onTemp, marks, onMark }: {
             <JudgeCells active bad={bad} onSet={(b) => onMark(rowId, b)} />
             {isTemp ? (
               <>
-                <td className="temp"><REditable value={temps.a} onSave={(v) => onTemp({ ...temps, a: v })} /></td>
-                <td className="temp"><REditable value={temps.b} onSave={(v) => onTemp({ ...temps, b: v })} /></td>
-                <td className="temp"><REditable value={temps.c} onSave={(v) => onTemp({ ...temps, c: v })} /></td>
+                <td className="temp temp-cell"><REditable value={stripDeg(temps.a)} onSave={(v) => onTemp({ ...temps, a: v })} align="right" w="70%" /><span className="unit-in">℃</span></td>
+                <td className="temp temp-cell"><REditable value={stripDeg(temps.b)} onSave={(v) => onTemp({ ...temps, b: v })} align="right" w="70%" /><span className="unit-in">℃</span></td>
+                <td className="temp temp-cell"><REditable value={stripDeg(temps.c)} onSave={(v) => onTemp({ ...temps, c: v })} align="right" w="70%" /><span className="unit-in">℃</span></td>
               </>
             ) : (<td colSpan={3} />)}
           </tr>
