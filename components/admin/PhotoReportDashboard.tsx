@@ -420,6 +420,8 @@ function DlBlock({ idx, name, temps, onName, onTemp, marks, onMark }: {
   idx: number; name: string; temps: DlTemp; onName: (v: string) => void; onTemp: (t: DlTemp) => void;
   marks: Record<string, "부">; onMark: (rowId: string, bad: boolean) => void;
 }) {
+  // 이름 또는 온도가 입력된 블록만 '활성'(판정 ✓·℃ 표시). 안 채운 블록은 비어 있음
+  const active = !!(name && name.trim()) || !!(temps.a || temps.b || temps.c);
   return (
     <>
       {REC_ROWS.map((label, r) => {
@@ -429,16 +431,17 @@ function DlBlock({ idx, name, temps, onName, onTemp, marks, onMark }: {
         return (
           <tr key={r}>
             {r === 0 && <td className="gubun dl-gubun" rowSpan={5}>
-              <REditable value={name} onSave={onName} w="46px" ph="송도" /><span className="dl-suffix">D/L</span>
+              <REditable value={name} onSave={onName} w="46px" ph="입력" /><span className="dl-suffix">D/L</span>
             </td>}
             <td className="sub">{label}</td>
-            <JudgeCells active bad={bad} onSet={(b) => onMark(rowId, b)} />
+            <JudgeCells active={active} bad={bad} onSet={(b) => onMark(rowId, b)} />
             {isTemp ? (
-              <>
-                <td className="temp temp-cell"><REditable value={stripDeg(temps.a)} onSave={(v) => onTemp({ ...temps, a: v })} align="right" w="70%" /><span className="unit-in">℃</span></td>
-                <td className="temp temp-cell"><REditable value={stripDeg(temps.b)} onSave={(v) => onTemp({ ...temps, b: v })} align="right" w="70%" /><span className="unit-in">℃</span></td>
-                <td className="temp temp-cell"><REditable value={stripDeg(temps.c)} onSave={(v) => onTemp({ ...temps, c: v })} align="right" w="70%" /><span className="unit-in">℃</span></td>
-              </>
+              (["a", "b", "c"] as const).map((k) => (
+                <td key={k} className="temp temp-cell">
+                  <REditable value={stripDeg(temps[k])} onSave={(v) => onTemp({ ...temps, [k]: v })} align="right" w="70%" />
+                  {active && <span className="unit-in">℃</span>}
+                </td>
+              ))
             ) : (<td colSpan={3} />)}
           </tr>
         );
@@ -467,6 +470,13 @@ function RecordPage({ derived, ov, rd, onReport, onDigital, digital }: { derived
   const temps = ov.temps ?? [];
   const dlNames = ov.dlNames ?? [];
   const marks = ov.marks ?? {};
+  // 이름/온도가 입력된 D/L 블록 수 → 접속재수량 자동 (기본은 빈칸)
+  const activeCount = Array.from({ length: dlCount }).filter((_, i) => {
+    const nm = (dlNames[i] ?? "").trim();
+    const t = temps[i];
+    return !!nm || !!(t && (t.a || t.b || t.c));
+  }).length;
+  const jointAuto = ov.jointCount || (activeCount > 0 ? `${activeCount}/${activeCount}` : "");
   const setCount = (n: number) => onReport({ dlCount: Math.max(1, Math.min(30, n)) });
   const setTemp = (i: number, t: DlTemp) => {
     const next = Array.from({ length: dlCount }, (_, k) => temps[k] ?? { a: "", b: "", c: "" });
@@ -514,7 +524,7 @@ function RecordPage({ derived, ov, rd, onReport, onDigital, digital }: { derived
           <tbody>
             <tr><td className="lab">본부</td><td>{rd.bonbu}</td><td className="lab">사업소</td><td>{rd.saeopso}</td></tr>
             <tr><td className="lab">선호번호</td><td>{seqFull}</td><td className="lab">전산화번호</td><td><REditable value={digital} onSave={onDigital} /></td></tr>
-            <tr><td className="lab">대상설비</td><td /><td className="lab">접속재수량</td><td><REditable value={ov.jointCount ?? `${dlCount}/${dlCount}`} onSave={(v) => onReport({ jointCount: v })} /></td></tr>
+            <tr><td className="lab">대상설비</td><td /><td className="lab">접속재수량</td><td><REditable value={jointAuto} onSave={(v) => onReport({ jointCount: v })} /></td></tr>
             <tr><td className="lab">검사일자</td><td>{ov.inspectDate ?? rd.inspectDate}</td><td className="lab">점검자소속</td><td>{rd.inspectorOrg}</td></tr>
             <tr><td className="lab">종합판정</td><td><REditable value={ov.overall ?? rd.overall} onSave={(v) => onReport({ overall: v })} /></td><td className="lab">점검자</td><td>{rd.inspectorName}</td></tr>
             <tr><td className="lab">검사자 소속</td><td>{rd.checkerOrg}</td><td className="lab">검사자</td><td className="sign-cell">(인)</td></tr>
