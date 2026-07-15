@@ -168,6 +168,7 @@ type ReportOverride = {
   special?: string;     // 특이사항
   heatTemp?: string;    // 일반점검표 접속개소 과열여부 비고 온도(℃)
   giResults?: Record<string, string>; // 일반점검표 점검결과: 기본 양호, 수정한 행만 저장
+  giNotes?: Record<string, string>;   // 일반점검표 비고: 행별 비고(불량 시 기입)
   marks?: Record<string, "부">; // 판정결과: 기본 적합, 부적합인 행만 저장 (rowId → "부")
 };
 // 폴더/선로명 → 선로명(문자) + 선호번호(숫자 포함) 분리 ("국제M161" → 국제 / M161)
@@ -355,6 +356,10 @@ function GeneralInspectPage({ derived, ov, rd, onReport }: { derived: { title: s
   const giRes = ov.giResults ?? {};
   const setRes = (id: string, v: string) => onReport({ giResults: { ...giRes, [id]: v } });
   const resCell = (id: string) => <td className="res"><REditable value={giRes[id] ?? "양호"} onSave={(v) => setRes(id, v)} /></td>;
+  // 비고: 행별 편집(불량 시 기입)
+  const giNotes = ov.giNotes ?? {};
+  const setNote = (id: string, v: string) => onReport({ giNotes: { ...giNotes, [id]: v } });
+  const noteCell = (id: string) => <td className="gi-rmk"><REditable value={giNotes[id] ?? ""} onSave={(v) => setNote(id, v)} align="left" /></td>;
   return (
     <div className="ri-page gi-page doc-font">
       <table className="gi-frame">
@@ -383,16 +388,15 @@ function GeneralInspectPage({ derived, ov, rd, onReport }: { derived: { title: s
           <tr><th className="cat">점검 항목</th><th>점검 사항</th><th className="res">점검 결과</th><th className="rmk">비고</th></tr>
           {GI_STRUCT.map((t, i) => (
             <tr key={t}>{i === 0 && <td className="cat" rowSpan={GI_STRUCT.length}>구조물설비</td>}
-              <td className="item">{t}</td>{resCell(`s${i}`)}<td /></tr>
+              <td className="item">{t}</td>{resCell(`s${i}`)}{noteCell(`s${i}`)}</tr>
           ))}
           {GI_ELEC.map((t, i) => (
             <tr key={t}>{i === 0 && <td className="cat" rowSpan={GI_ELEC.length}>전기시설물<br />(케이블 및 기타설비)</td>}
               <td className="item">{t}</td>{resCell(`e${i}`)}
-              <td className={t.startsWith("접속개소") ? "heat-rmk" : ""}>
-                {t.startsWith("접속개소")
-                  ? <><REditable value={ov.heatTemp ?? ""} onSave={(v) => onReport({ heatTemp: v })} align="right" w="72%" />℃</>
-                  : ""}
-              </td></tr>
+              {t.startsWith("접속개소")
+                ? <td className="heat-rmk"><REditable value={ov.heatTemp ?? ""} onSave={(v) => onReport({ heatTemp: v })} align="right" w="72%" />℃</td>
+                : noteCell(`e${i}`)}
+              </tr>
           ))}
         </tbody>
       </table>
