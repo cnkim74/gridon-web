@@ -167,6 +167,7 @@ type ReportOverride = {
   overall?: string;     // 종합판정
   special?: string;     // 특이사항
   heatTemp?: string;    // 일반점검표 접속개소 과열여부 비고 온도(℃)
+  giResults?: Record<string, string>; // 일반점검표 점검결과: 기본 양호, 수정한 행만 저장
   marks?: Record<string, "부">; // 판정결과: 기본 적합, 부적합인 행만 저장 (rowId → "부")
 };
 // 폴더/선로명 → 선로명(문자) + 선호번호(숫자 포함) 분리 ("국제M161" → 국제 / M161)
@@ -350,6 +351,10 @@ const GI_ELEC = [
 function GeneralInspectPage({ derived, ov, rd, onReport }: { derived: { title: string; seq: string } } & ReportFns) {
   const title = ov.lineTitle ?? derived.title;
   const seq = ov.seq ?? derived.seq;
+  // 점검결과: 기본 양호, 클릭해 수정(불량 등). 수정한 행만 저장
+  const giRes = ov.giResults ?? {};
+  const setRes = (id: string, v: string) => onReport({ giResults: { ...giRes, [id]: v } });
+  const resCell = (id: string) => <td className="res"><REditable value={giRes[id] ?? "양호"} onSave={(v) => setRes(id, v)} /></td>;
   return (
     <div className="ri-page gi-page doc-font">
       <table className="gi-frame">
@@ -378,11 +383,11 @@ function GeneralInspectPage({ derived, ov, rd, onReport }: { derived: { title: s
           <tr><th className="cat">점검 항목</th><th>점검 사항</th><th className="res">점검 결과</th><th className="rmk">비고</th></tr>
           {GI_STRUCT.map((t, i) => (
             <tr key={t}>{i === 0 && <td className="cat" rowSpan={GI_STRUCT.length}>구조물설비</td>}
-              <td className="item">{t}</td><td className="res">양호</td><td /></tr>
+              <td className="item">{t}</td>{resCell(`s${i}`)}<td /></tr>
           ))}
           {GI_ELEC.map((t, i) => (
             <tr key={t}>{i === 0 && <td className="cat" rowSpan={GI_ELEC.length}>전기시설물<br />(케이블 및 기타설비)</td>}
-              <td className="item">{t}</td><td className="res">양호</td>
+              <td className="item">{t}</td>{resCell(`e${i}`)}
               <td className={t.startsWith("접속개소") ? "heat-rmk" : ""}>
                 {t.startsWith("접속개소")
                   ? <><REditable value={ov.heatTemp ?? ""} onSave={(v) => onReport({ heatTemp: v })} align="right" w="72%" />℃</>
@@ -393,7 +398,7 @@ function GeneralInspectPage({ derived, ov, rd, onReport }: { derived: { title: s
       </table>
       <table className="gi-foot">
         <tbody>
-          <tr><td className="lab">(기타사항)</td><td className="val">양호</td></tr>
+          <tr><td className="lab">(기타사항)</td><td className="val"><REditable value={giRes["etc"] ?? "양호"} onSave={(v) => setRes("etc", v)} /></td></tr>
           <tr><td className="lab">(보강방법)</td><td className="val gi-foot-empty" /></tr>
         </tbody>
       </table>
