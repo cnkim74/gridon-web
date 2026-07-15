@@ -27,6 +27,14 @@ const PAGE2: Slot[] = [
   { no: "TH1", label: "열화상 측정" }, // 파일명 #1 (#2 이상은 추가 페이지)
 ];
 
+// 사진 현황표에서 체크할 12개 슬롯 (사진대지 기준)
+const STATUS_SLOTS: Slot[] = [
+  { no: "01", label: "표시찰" }, { no: "02", label: "전경" }, { no: "03", label: "단차" },
+  { no: "04", label: "침수" }, { no: "05", label: "양수중" }, { no: "06", label: "양수후" },
+  { no: "07", label: "서" }, { no: "08", label: "동" }, { no: "09", label: "북" }, { no: "10", label: "남" },
+  { no: "12", label: "접지" }, { no: "TH1", label: "열화상" },
+];
+
 const DEFAULT_PROJECT = "2026년 경남본부 배전맨홀 점검공사(차도)";
 
 // Supabase app_settings 키 (관리자 전용, 모든 기기에서 공유)
@@ -806,7 +814,7 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
   const [loadingPhotos, setLoadingPhotos] = useState(false);
 
   // 전체 일괄 인쇄
-  const [mode, setMode] = useState<"single" | "all">("single");
+  const [mode, setMode] = useState<"single" | "all" | "status">("single");
   const [allReports, setAllReports] = useState<{ line: Line; photoMap: Record<string, string>; extras: string[] }[]>([]);
   const [loadingAll, setLoadingAll] = useState(false);
   const [allProgress, setAllProgress] = useState("");
@@ -993,9 +1001,9 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
   }
 
   // 전체 선로 일괄 로드 → 미리보기/인쇄
-  async function loadAll() {
+  async function loadAll(targetMode: "all" | "status" = "all") {
     if (lines.length === 0 || !apiKey.trim()) return;
-    setErr(null); setLoadingAll(true); setMode("all"); setSelected(null); setAllReports([]);
+    setErr(null); setLoadingAll(true); setMode(targetMode); setSelected(null); setAllReports([]);
     const reports: { line: Line; photoMap: Record<string, string>; extras: string[] }[] = [];
     try {
       for (let i = 0; i < lines.length; i++) {
@@ -1022,7 +1030,10 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
         <div><h1>{DOC_TITLE}</h1><p>{DOC_DESC}</p></div>
         {lines.length > 0 && (
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn--ghost btn--sm" type="button" onClick={loadAll} disabled={loadingAll}>
+            <button className="btn btn--ghost btn--sm" type="button" onClick={() => loadAll("status")} disabled={loadingAll}>
+              📋 사진 현황
+            </button>
+            <button className="btn btn--ghost btn--sm" type="button" onClick={() => loadAll("all")} disabled={loadingAll}>
               {loadingAll ? `불러오는 중 ${allProgress}` : `전체 ${lines.length}개 인쇄`}
             </button>
             {mode === "single" && selected && (
@@ -1140,6 +1151,65 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
                 <LineReport doc={doc} project={project} lineName={selected.name} digital={digitalOf(selected.name)} equipType={equipTypeOf(selected.name)} onOverride={(f, v) => saveOverride(selected.name, f, v)} photoMap={photoMap} extras={extras} rd={rd} report={reportOf(selected.name)} onReport={(patch) => saveReport(selected.name, patch)} />
               </div>
             </>
+          )}
+
+          {/* 사진 현황표 */}
+          {mode === "status" && (
+            loadingAll ? (
+              <div className="panel no-print" style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>
+                전체 사진 현황 불러오는 중… {allProgress}
+              </div>
+            ) : (() => {
+              const filledOf = (r: typeof allReports[number]) => STATUS_SLOTS.filter((s) => r.photoMap[s.no]).length;
+              const done = allReports.filter((r) => filledOf(r) === STATUS_SLOTS.length).length;
+              const totalPhotos = allReports.reduce((n, r) => n + filledOf(r), 0);
+              return (
+                <div className="no-print">
+                  <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12, fontSize: 13 }}>
+                    <span>선로 <strong>{allReports.length}</strong>개</span>
+                    <span style={{ color: "#1f7a3d" }}>완료(12/12) <strong>{done}</strong>개</span>
+                    <span style={{ color: "#b3261e" }}>미완 <strong>{allReports.length - done}</strong>개</span>
+                    <span style={{ color: "var(--muted)" }}>총 사진 {totalPhotos}장</span>
+                  </div>
+                  <div className="panel" style={{ overflowX: "auto" }}>
+                    <table className="dtable" style={{ minWidth: 820, fontSize: 12 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ position: "sticky", left: 0, background: "var(--paper)", textAlign: "left" }}>선로</th>
+                          {STATUS_SLOTS.map((s) => <th key={s.no} style={{ textAlign: "center", padding: "6px 4px" }}>{s.label}</th>)}
+                          <th style={{ textAlign: "center" }}>계</th>
+                          <th style={{ textAlign: "center" }}>열화상+</th>
+                          <th style={{ textAlign: "center" }}>기타</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allReports.map((r) => {
+                          const filled = filledOf(r);
+                          const full = filled === STATUS_SLOTS.length;
+                          const thExtra = thermalExtras(r.photoMap).length;
+                          return (
+                            <tr key={r.line.id}>
+                              <td style={{ position: "sticky", left: 0, background: "var(--paper)", fontWeight: 600, whiteSpace: "nowrap" }}>{r.line.name}</td>
+                              {STATUS_SLOTS.map((s) => (
+                                <td key={s.no} style={{ textAlign: "center", background: r.photoMap[s.no] ? undefined : "#fdecea", color: r.photoMap[s.no] ? "#1f7a3d" : "#e0b4b0" }}>
+                                  {r.photoMap[s.no] ? "✓" : "·"}
+                                </td>
+                              ))}
+                              <td style={{ textAlign: "center", fontWeight: 700, color: full ? "#1f7a3d" : "#b3261e" }}>{filled}/{STATUS_SLOTS.length}</td>
+                              <td style={{ textAlign: "center", color: "var(--muted)" }}>{thExtra || ""}</td>
+                              <td style={{ textAlign: "center", color: "var(--muted)" }}>{r.extras.length || ""}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 8, lineHeight: 1.6 }}>
+                    ✓ = 사진 있음 · <span style={{ color: "#e0b4b0" }}>·</span> = 없음(빨간칸) · 접지=파일 12 · 열화상=파일 #1(추가분은 열화상+) · 기타=공N
+                  </p>
+                </div>
+              );
+            })()
           )}
 
           {/* 전체 일괄 */}
