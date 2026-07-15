@@ -427,7 +427,7 @@ function DlBlock({ idx, name, temps, onName, onTemp, marks, onMark }: {
         return (
           <tr key={r}>
             {r === 0 && <td className="gubun dl-gubun" rowSpan={5}>
-              <REditable value={name || String(idx + 1)} onSave={onName} w="34px" /><span className="dl-suffix">D/L</span>
+              <REditable value={name || `${idx + 1}/${idx + 1}`} onSave={onName} w="40px" /><span className="dl-suffix">D/L</span>
             </td>}
             <td className="sub">{label}</td>
             <JudgeCells active bad={bad} onSet={(b) => onMark(rowId, b)} />
@@ -507,13 +507,6 @@ function RecordPage({ derived, ov, rd, onReport, onDigital, digital }: { derived
     <>
       <div className="ri-page rec-page doc-font">
         <div className="rec-title doc-title">맨·핸드홀 내 전력설비 검사기록표</div>
-        <div className="no-print rec-dl-ctrl">
-          D/L 블록 수:
-          <button type="button" onClick={() => setCount(dlCount - 1)}>−</button>
-          <b>{dlCount}</b>
-          <button type="button" onClick={() => setCount(dlCount + 1)}>＋</button>
-          <span>기본 5 · 시트값 자동 · 5개 초과 시 다음 장에 이어 출력</span>
-        </div>
         <div className="rec-topbar">□ 기본사항　　날씨:　　　　온도　　　　습도</div>
         <table className="rec-basic">
           <tbody>
@@ -550,6 +543,14 @@ function RecordPage({ derived, ov, rd, onReport, onDigital, digital }: { derived
           </table>
         </div>
       ))}
+
+      <div className="no-print rec-dl-ctrl">
+        D/L 블록:
+        <button type="button" onClick={() => setCount(dlCount - 1)} disabled={dlCount <= 1}>− 삭제</button>
+        <b>{dlCount}개</b>
+        <button type="button" onClick={() => setCount(dlCount + 1)}>＋ 추가</button>
+        <span>기본 5개 · 시트에 더 있으면 자동 · 5개 초과분은 다음 장에 이어 출력</span>
+      </div>
     </>
   );
 }
