@@ -399,7 +399,7 @@
 .rec-detail .jc-click{cursor:pointer}
 .rec-detail .jc-click:hover{background:#eef}
 .rec-detail .dl-gubun{white-space:nowrap}
-.rec-detail .dl-gubun input{width:40px;text-align:center}
+.rec-detail .dl-gubun input{width:46px;text-align:center}
 .rec-detail .temp-cell{text-align:right;white-space:nowrap;padding-right:1.5mm}
 .rec-detail .temp-cell .unit-in{color:#333;margin-left:1px}
 .rec-detail .dl-gubun .dl-suffix{margin-left:1px}
@@ -421,6 +421,7 @@
   .gg-page{padding:8mm 10mm}
   .ri-page{padding:11mm 13mm}
   .no-print{display:none!important}
+  input::placeholder{color:transparent!important}   /* 빈 입력칸 placeholder는 인쇄 안 함 */
   /* 문서별 따로 인쇄: 인쇄 종류에 맞는 문서만 노출 */
   body.printing-gongga .sajin-doc,body.printing-gongga .result-doc,body.printing-gongga .cover-page{display:none!important}
   body.printing-sajin .gongga-doc,body.printing-sajin .result-doc,body.printing-sajin .cover-page{display:none!important}

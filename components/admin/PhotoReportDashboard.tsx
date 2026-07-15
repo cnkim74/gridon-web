@@ -429,7 +429,7 @@ function DlBlock({ idx, name, temps, onName, onTemp, marks, onMark }: {
         return (
           <tr key={r}>
             {r === 0 && <td className="gubun dl-gubun" rowSpan={5}>
-              <REditable value={name || `${idx + 1}/${idx + 1}`} onSave={onName} w="40px" /><span className="dl-suffix">D/L</span>
+              <REditable value={name} onSave={onName} w="46px" ph="송도" /><span className="dl-suffix">D/L</span>
             </td>}
             <td className="sub">{label}</td>
             <JudgeCells active bad={bad} onSet={(b) => onMark(rowId, b)} />
@@ -514,7 +514,7 @@ function RecordPage({ derived, ov, rd, onReport, onDigital, digital }: { derived
           <tbody>
             <tr><td className="lab">본부</td><td>{rd.bonbu}</td><td className="lab">사업소</td><td>{rd.saeopso}</td></tr>
             <tr><td className="lab">선호번호</td><td>{seqFull}</td><td className="lab">전산화번호</td><td><REditable value={digital} onSave={onDigital} /></td></tr>
-            <tr><td className="lab">대상설비</td><td /><td className="lab">접속재수량</td><td><REditable value={ov.jointCount ?? ""} onSave={(v) => onReport({ jointCount: v })} /></td></tr>
+            <tr><td className="lab">대상설비</td><td /><td className="lab">접속재수량</td><td><REditable value={ov.jointCount ?? `${dlCount}/${dlCount}`} onSave={(v) => onReport({ jointCount: v })} /></td></tr>
             <tr><td className="lab">검사일자</td><td>{ov.inspectDate ?? rd.inspectDate}</td><td className="lab">점검자소속</td><td>{rd.inspectorOrg}</td></tr>
             <tr><td className="lab">종합판정</td><td><REditable value={ov.overall ?? rd.overall} onSave={(v) => onReport({ overall: v })} /></td><td className="lab">점검자</td><td>{rd.inspectorName}</td></tr>
             <tr><td className="lab">검사자 소속</td><td>{rd.checkerOrg}</td><td className="lab">검사자</td><td className="sign-cell">(인)</td></tr>
@@ -548,9 +548,9 @@ function RecordPage({ derived, ov, rd, onReport, onDigital, digital }: { derived
 
       <div className="no-print rec-dl-ctrl">
         D/L 블록:
-        <button type="button" onClick={() => setCount(dlCount - 1)} disabled={dlCount <= 1}>− 삭제</button>
-        <b>{dlCount}개</b>
-        <button type="button" onClick={() => setCount(dlCount + 1)}>＋ 추가</button>
+        <button type="button" onClick={() => setCount(dlCount - 1)} disabled={dlCount <= 1}>−</button>
+        <b>{dlCount}</b>
+        <button type="button" onClick={() => setCount(dlCount + 1)}>＋</button>
         <span>기본 5개 · 시트에 더 있으면 자동 · 5개 초과분은 다음 장에 이어 출력</span>
       </div>
     </>
