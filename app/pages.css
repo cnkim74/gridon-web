@@ -429,13 +429,14 @@
 .sv-sect,.sv-self-title{border:1px solid #000;background:#f2f2f2;font-weight:700;font-size:12px;text-align:center;padding:2px;border-bottom:none}
 .sv-self-title{margin-top:3mm}
 .sv-tel,.sv-self{width:100%;table-layout:fixed}
-.sv-tel th,.sv-tel td,.sv-self th,.sv-self td{border:1px solid #000;font-size:9px;padding:1px 2px;text-align:center;vertical-align:middle;height:5mm;white-space:normal;word-break:keep-all;overflow-wrap:anywhere}
+.sv-tel th,.sv-tel td,.sv-self th,.sv-self td{border:1px solid #000;font-size:9px;padding:1px 2px;text-align:center;vertical-align:middle;height:4.6mm;white-space:normal;word-break:keep-all;overflow-wrap:anywhere}
 .sv-tel th,.sv-self th{background:#f2f2f2;font-weight:700;height:9mm;line-height:1.15}
 .sv-self th,.sv-self td{font-size:8px}
 .sv-self{margin-top:-1px}
 /* 약도 직접 그리기 */
 .sv-box .sketch-canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
-.sv-box .sketch-clear{position:absolute;top:2px;right:4px;font-size:11px;border:1px solid #bbb;border-radius:4px;background:#fff;cursor:pointer;padding:1px 7px;z-index:3}
+.sv-box .sketch-tools{position:absolute;top:3px;right:4px;display:flex;gap:4px;z-index:3}
+.sv-box .sketch-tools button{font-size:11px;border:1px solid #bbb;border-radius:4px;background:rgba(255,255,255,.9);cursor:pointer;padding:2px 8px}
 .sv-box .sv-sketch-print{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 
 @media print{
