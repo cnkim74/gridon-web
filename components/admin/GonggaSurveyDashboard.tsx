@@ -191,6 +191,7 @@ export default function GonggaSurveyDashboard() {
   const [selected, setSelected] = useState<Survey | null>(null);
   const [mode, setMode] = useState<"single" | "all">("single");
   const [sketches, setSketches] = useState<Record<string, string>>({});
+  const [branch, setBranch] = useState("전체");
 
   const sketchKey = (sv: Survey) => `약도:${sv.line} ${sv.seq}`.trim();
   async function saveSketch(sv: Survey, data: string) {
@@ -252,7 +253,10 @@ export default function GonggaSurveyDashboard() {
     window.print();
   }
 
-  const withData = surveys.filter((s) => s.tel.length || s.self.length).length;
+  // 지사(사업소명)별 필터
+  const branches = Array.from(new Set(surveys.map((s) => s.sa).filter(Boolean)));
+  const shown = branch === "전체" ? surveys : surveys.filter((s) => s.sa === branch);
+  const withData = shown.filter((s) => s.tel.length || s.self.length).length;
 
   return (
     <>
@@ -260,9 +264,9 @@ export default function GonggaSurveyDashboard() {
         <div><h1>공가조사표 (통신설비)</h1><p>구글시트 공가조사표_지사 데이터를 선로별로 읽어 통신설비 공가조사표(가로) 자동 생성</p></div>
         {surveys.length > 0 && (
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn--ghost btn--sm" type="button" onClick={() => { setMode("all"); setSelected(null); }}>전체 {surveys.length}개 인쇄</button>
+            <button className="btn btn--ghost btn--sm" type="button" onClick={() => { setMode("all"); setSelected(null); }}>{branch === "전체" ? "전체" : branch} {shown.length}개 인쇄</button>
             <button className="btn btn--ghost btn--sm" type="button" onClick={() => load(apiKey, sheetUrl)} disabled={loading}>새로고침</button>
-            <button className="btn btn--sm" type="button" onClick={doPrint} disabled={mode === "single" ? !selected : surveys.length === 0}>🖨 인쇄 · PDF 저장</button>
+            <button className="btn btn--sm" type="button" onClick={doPrint} disabled={mode === "single" ? !selected : shown.length === 0}>🖨 인쇄 · PDF 저장</button>
           </div>
         )}
       </div>
@@ -280,11 +284,21 @@ export default function GonggaSurveyDashboard() {
       {surveys.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16 }}>
           <div className="panel no-print" style={{ alignSelf: "start", maxHeight: "80vh", overflowY: "auto" }}>
+            {branches.length > 1 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, padding: "10px 10px 4px" }}>
+                {["전체", ...branches].map((b) => (
+                  <button key={b} type="button" onClick={() => { setBranch(b); setSelected(null); }}
+                    style={{ padding: "4px 11px", border: "1px solid var(--line-2)", borderRadius: 20, fontSize: 12, cursor: "pointer", background: branch === b ? "var(--ink)" : "transparent", color: branch === b ? "var(--paper)" : "inherit", fontWeight: branch === b ? 700 : 400 }}>
+                    {b}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="panel-body" style={{ borderBottom: "1px solid var(--line-2)", fontWeight: 700, fontSize: 13, position: "sticky", top: 0, background: "var(--paper)" }}>
-              선로 {surveys.length}개 · 데이터 {withData}개
+              선로 {shown.length}개 · 데이터 {withData}개
             </div>
             <div style={{ padding: 8 }}>
-              {surveys.map((s) => {
+              {shown.map((s) => {
                 const on = selected?.key === s.key && mode === "single";
                 const has = s.tel.length || s.self.length;
                 return (
@@ -307,7 +321,7 @@ export default function GonggaSurveyDashboard() {
             )}
             {mode === "all" && (
               <div className="sd-print">
-                {surveys.map((s) => <Fragment key={s.key}><SurveySheet sv={s} sketch={sketches[sketchKey(s)] ?? ""} /></Fragment>)}
+                {shown.map((s) => <Fragment key={s.key}><SurveySheet sv={s} sketch={sketches[sketchKey(s)] ?? ""} /></Fragment>)}
               </div>
             )}
           </div>
