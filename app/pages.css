@@ -423,13 +423,13 @@
 .sv-legend .bc-n{background:#f2f2f2;font-weight:700;width:3.2%}
 .sv-legend .bc-l{font-size:10px;width:6.4%}
 .sv-mid{display:flex;margin-top:-1px}
-.sv-box{width:33%;border:1px solid #000;position:relative;min-height:80mm}
+.sv-box{width:33%;border:1px solid #000;position:relative;min-height:40mm}
 .sv-box .sv-cap{position:absolute;top:2px;left:4px;font-size:11px;color:#666}
 .sv-telwrap{flex:1;margin-left:-1px}
 .sv-sect,.sv-self-title{border:1px solid #000;background:#f2f2f2;font-weight:700;font-size:12px;text-align:center;padding:2px;border-bottom:none}
 .sv-self-title{margin-top:3mm}
 .sv-tel,.sv-self{width:100%;table-layout:fixed}
-.sv-tel th,.sv-tel td,.sv-self th,.sv-self td{border:1px solid #000;font-size:9px;padding:1px 2px;text-align:center;vertical-align:middle;height:4.6mm;white-space:normal;word-break:keep-all;overflow-wrap:anywhere}
+.sv-tel th,.sv-tel td,.sv-self th,.sv-self td{border:1px solid #000;font-size:9px;padding:1px 2px;text-align:center;vertical-align:middle;height:5mm;white-space:normal;word-break:keep-all;overflow-wrap:anywhere}
 .sv-tel th,.sv-self th{background:#f2f2f2;font-weight:700;height:9mm;line-height:1.15}
 .sv-self th,.sv-self td{font-size:8px}
 .sv-self{margin-top:-1px}
