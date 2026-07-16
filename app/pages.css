@@ -450,7 +450,8 @@
   .sd-page{padding:10mm 12mm}
   .gg-page{padding:8mm 10mm}
   .ri-page{padding:11mm 13mm}
-  .sv-page{padding:0}
+  /* 공가조사표: @page 여백 0 + 페이지 안쪽 padding으로 제책 여백(상단 최대). 넘치면 다음 장 */
+  .sv-page{padding:15mm 9mm 10mm 9mm!important;box-sizing:border-box!important}
   .no-print{display:none!important}
   input::placeholder{color:transparent!important}   /* 빈 입력칸 placeholder는 인쇄 안 함 */
   /* 문서별 따로 인쇄: 인쇄 종류에 맞는 문서만 노출 */
