@@ -18,7 +18,7 @@ const TEL_CIDX = [10, 11, 12, 13, 14, 15, 16, 17, 18, 22, 23, 24, 25];
 // 자기설비 내역 컬럼(22) + 시트 열 인덱스
 const SELF_COLS = ["자기설비코드", "자기설비 선로명", "자기설비 선로번호", "자기설비 전산화번호", "자기설비 벽면번호", "자기설비 관로구번호", "사업자", "상호", "임대기준", "관로규격", "PE내관규격", "승인", "설치일자", "케이블번호", "용도", "선종", "규격", "선로길이", "실측선로길이", "접속사유", "봉인번호", "접수번호"];
 const SELF_CIDX = [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
-const TEL_MINROWS = 10, SELF_MINROWS = 15;
+const TEL_MINROWS = 9, SELF_MINROWS = 15;
 
 type Survey = { key: string; sa: string; dig: string; line: string; seq: string; bigo: string; hoe: string; tel: string[][]; self: string[][] };
 
@@ -245,7 +245,7 @@ export default function GonggaSurveyDashboard() {
     document.getElementById("sv-print-style")?.remove();
     const style = document.createElement("style");
     style.id = "sv-print-style";
-    style.textContent = "@page{size:A4 landscape;margin:6mm}";
+    style.textContent = "@page{size:A4 landscape;margin:15mm 9mm 10mm 9mm}"; // 상단 여백 최대(제책용), 좌우·하단 여유
     document.head.appendChild(style);
     const cleanup = () => { document.getElementById("sv-print-style")?.remove(); window.removeEventListener("afterprint", cleanup); };
     window.addEventListener("afterprint", cleanup);
