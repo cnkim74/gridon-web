@@ -150,7 +150,7 @@ function SurveySheet({ sv, sketch, onSketch, editable }: { sv: Survey; sketch: s
           {BAD.map((b, i) => <Fragment key={i}><td className="bc-n">{i + 1}</td><td className="bc-l">{b}</td></Fragment>)}
         </tr>
       </tbody></table>
-      <div className="sv-mid">
+      <div className="sv-mid" style={{ flexGrow: telRows }}>
         <div className="sv-box">
           {editable && onSketch
             ? <SketchPad value={sketch} onSave={onSketch} />
@@ -169,7 +169,7 @@ function SurveySheet({ sv, sketch, onSketch, editable }: { sv: Survey; sketch: s
         </div>
       </div>
       <div className="sv-self-title">자기설비 내역</div>
-      <table className="sv-self">
+      <table className="sv-self" style={{ flexGrow: selfRows }}>
         <thead><tr>{SELF_COLS.map((c) => <th key={c}>{c}</th>)}</tr></thead>
         <tbody>
           {Array.from({ length: selfRows }).map((_, i) => (
