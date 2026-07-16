@@ -423,7 +423,7 @@
 .sv-legend .bc-n{background:#f2f2f2;font-weight:700;width:3.2%}
 .sv-legend .bc-l{font-size:10px;width:6.4%}
 .sv-mid{display:flex;margin-top:-1px}
-.sv-box{width:33%;border:1px solid #000;position:relative;min-height:40mm}
+.sv-box{width:66mm;border:1px solid #000;position:relative;min-height:40mm}
 .sv-box .sv-cap{position:absolute;top:2px;left:4px;font-size:11px;color:#666}
 .sv-telwrap{flex:1;margin-left:-1px}
 .sv-sect,.sv-self-title{border:1px solid #000;background:#f2f2f2;font-weight:700;font-size:12px;text-align:center;padding:2px;border-bottom:none}
