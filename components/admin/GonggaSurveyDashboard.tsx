@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, Fragment } from "react";
+import { useEffect, useState, useRef, Fragment } from "react";
 import { supabase } from "@/lib/supabase";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -70,8 +70,45 @@ function parseSurvey(rows: unknown[][]): Survey[] {
   return out;
 }
 
+// ── 약도 직접 그리기 (아이패드 펜슬·터치 / PC 마우스) ─────────────────────────
+function SketchPad({ value, onSave }: { value: string; onSave: (d: string) => void }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const last = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const c = ref.current; if (!c) return;
+    const ctx = c.getContext("2d"); if (!ctx) return;
+    ctx.clearRect(0, 0, c.width, c.height);
+    if (value) { const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, c.width, c.height); img.src = value; }
+  }, [value]);
+
+  const pos = (e: React.PointerEvent) => {
+    const c = ref.current!; const r = c.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (c.width / r.width), y: (e.clientY - r.top) * (c.height / r.height) };
+  };
+  const down = (e: React.PointerEvent) => { drawing.current = true; last.current = pos(e); (e.target as Element).setPointerCapture(e.pointerId); };
+  const move = (e: React.PointerEvent) => {
+    if (!drawing.current) return;
+    const ctx = ref.current!.getContext("2d")!; const p = pos(e);
+    ctx.strokeStyle = "#111"; ctx.lineWidth = 2.5; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(last.current!.x, last.current!.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+    last.current = p;
+  };
+  const up = () => { if (!drawing.current) return; drawing.current = false; onSave(ref.current!.toDataURL("image/png")); };
+  const clear = () => { const c = ref.current!; c.getContext("2d")!.clearRect(0, 0, c.width, c.height); onSave(""); };
+
+  return (
+    <>
+      <canvas ref={ref} width={780} height={640} className="sketch-canvas"
+        onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerLeave={up} />
+      <button type="button" className="sketch-clear no-print" onClick={clear}>지우기</button>
+    </>
+  );
+}
+
 // ── 공가조사표 한 장 ───────────────────────────────────────────────────────
-function SurveySheet({ sv }: { sv: Survey }) {
+function SurveySheet({ sv, sketch, onSketch, editable }: { sv: Survey; sketch: string; onSketch?: (d: string) => void; editable?: boolean }) {
   const telRows = Math.max(TEL_MINROWS, sv.tel.length);
   const selfRows = Math.max(SELF_MINROWS, sv.self.length);
   return (
@@ -92,7 +129,12 @@ function SurveySheet({ sv }: { sv: Survey }) {
         </tr>
       </tbody></table>
       <div className="sv-mid">
-        <div className="sv-box"><span className="sv-cap">□ 약도</span></div>
+        <div className="sv-box">
+          <span className="sv-cap">□ 약도</span>
+          {editable && onSketch
+            ? <SketchPad value={sketch} onSave={onSketch} />
+            : (sketch && <img className="sv-sketch-print" src={sketch} alt="약도" />)}
+        </div>
         <div className="sv-telwrap">
           <div className="sv-sect">통신설비 시설내역</div>
           <table className="sv-tel">
@@ -127,6 +169,14 @@ export default function GonggaSurveyDashboard() {
   const [err, setErr] = useState<string | null>(null);
   const [selected, setSelected] = useState<Survey | null>(null);
   const [mode, setMode] = useState<"single" | "all">("single");
+  const [sketches, setSketches] = useState<Record<string, string>>({});
+
+  const sketchKey = (sv: Survey) => `약도:${sv.line} ${sv.seq}`.trim();
+  async function saveSketch(sv: Survey, data: string) {
+    const k = sketchKey(sv);
+    setSketches((prev) => ({ ...prev, [k]: data }));
+    await sba.from("line_overrides").upsert({ line_name: k, sketch: data, updated_at: new Date().toISOString() });
+  }
 
   useEffect(() => {
     (async () => {
@@ -136,6 +186,16 @@ export default function GonggaSurveyDashboard() {
       const k = get(K_API), sh = get(K_SHEET);
       setApiKey(k); setSheetUrl(sh);
       if (k.trim() && sh.trim()) load(k, sh);
+    })();
+    // 저장된 약도 로드 (line_overrides.sketch, 마이그레이션 전이면 무시)
+    (async () => {
+      const res: SbaRes = await sba.from("line_overrides").select("line_name,sketch");
+      if (res.error) return;
+      const m: Record<string, string> = {};
+      for (const r of (res.data as { line_name: string; sketch: string | null }[]) ?? []) {
+        if (r.line_name?.startsWith("약도:") && r.sketch) m[r.line_name] = r.sketch;
+      }
+      setSketches(m);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -219,14 +279,14 @@ export default function GonggaSurveyDashboard() {
 
           <div>
             {mode === "single" && selected && (
-              <div className="sd-print"><SurveySheet sv={selected} /></div>
+              <div className="sd-print"><SurveySheet sv={selected} sketch={sketches[sketchKey(selected)] ?? ""} onSketch={(d) => saveSketch(selected, d)} editable /></div>
             )}
             {mode === "single" && !selected && (
               <div className="panel no-print" style={{ padding: "60px 20px", textAlign: "center", color: "var(--muted)", fontSize: 13 }}>좌측에서 선로를 선택하세요.</div>
             )}
             {mode === "all" && (
               <div className="sd-print">
-                {surveys.map((s) => <Fragment key={s.key}><SurveySheet sv={s} /></Fragment>)}
+                {surveys.map((s) => <Fragment key={s.key}><SurveySheet sv={s} sketch={sketches[sketchKey(s)] ?? ""} /></Fragment>)}
               </div>
             )}
           </div>
