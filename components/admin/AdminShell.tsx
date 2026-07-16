@@ -39,6 +39,7 @@ const ICONS: Record<string, ReactNode> = {
   report: (<><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" /><rect x="8" y="12" width="3.5" height="3.5" rx=".4" /><rect x="12.5" y="12" width="3.5" height="3.5" rx=".4" /></>),
   "report-result": (<><path d="M9 4H6a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1h-3" /><rect x="8" y="2.5" width="8" height="3.5" rx="1" /><path d="m8.5 14 2 2 4-4" /></>),
   "report-gongga": (<><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M4 9h16M4 15h16M10 3v18" /></>),
+  "report-survey": (<><rect x="3" y="4" width="18" height="16" rx="1.5" /><path d="M3 9h18M9 9v11M3 14h6" /></>),
   "report-sajin": (<><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" /><path d="M21 15l-5-5L5 21" /></>),
   schedule: (<><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M3 10h18M8 2v4M16 2v4" /><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" /></>),
   namecard: (<><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="8" cy="11" r="2" /><path d="M4.5 16.5a3.5 3.5 0 0 1 7 0M14 9.5h4M14 13h3" /></>),
@@ -83,6 +84,7 @@ const NAV: [string, NavEntry[]][] = [
   ["결과보고서 작성", [
     ["report-result", "맨홀 점검 결과보고서", "/admin/report/result"],
     ["report-gongga", "지중설비별 공가조사표", "/admin/report/gongga"],
+    ["report-survey", "공가조사표(통신설비)", "/admin/report/gongga-survey"],
     ["report-sajin", "맨홀점검사진대지", "/admin/report/sajin"],
   ]],
   ["인사", [

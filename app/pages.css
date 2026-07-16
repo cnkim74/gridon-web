@@ -410,17 +410,41 @@
 .rec-dl-ctrl span{color:#999}
 .rec-special{height:22mm;text-align:left!important;vertical-align:top;padding:3mm}
 
+/* ── 공가조사표(통신설비) 양식 (가로 A4) ─────────────────────────────────── */
+.sv-page{width:285mm;background:#fff;color:#000;margin:0 auto 18px;padding:2mm;box-sizing:border-box;border:1px solid var(--line-2);box-shadow:0 2px 14px rgba(0,0,0,.06)}
+.sv-page table{border-collapse:collapse}
+.sv-info,.sv-legend{width:100%}
+.sv-info td,.sv-legend td{border:1px solid #000;font-size:11px;padding:2px 4px;text-align:center;height:8mm}
+.sv-info .lab,.sv-legend .lab{background:#f2f2f2;font-weight:700;white-space:nowrap}
+.sv-info .sv-bigo{width:16%}
+.sv-info .sv-hoe{width:7%}
+.sv-legend{margin-top:-1px}
+.sv-legend .lab{width:6%}
+.sv-legend .bc-n{background:#f2f2f2;font-weight:700;width:3.2%}
+.sv-legend .bc-l{font-size:10px;width:6.4%}
+.sv-mid{display:flex;margin-top:-1px}
+.sv-box{width:33%;border:1px solid #000;position:relative;min-height:80mm}
+.sv-box .sv-cap{position:absolute;top:2px;left:4px;font-size:11px;color:#666}
+.sv-telwrap{flex:1;margin-left:-1px}
+.sv-sect,.sv-self-title{border:1px solid #000;background:#f2f2f2;font-weight:700;font-size:12px;text-align:center;padding:2px;border-bottom:none}
+.sv-self-title{margin-top:3mm}
+.sv-tel,.sv-self{width:100%}
+.sv-tel th,.sv-tel td,.sv-self th,.sv-self td{border:1px solid #000;font-size:9px;padding:1px 2px;text-align:center;height:4.6mm}
+.sv-tel th,.sv-self th{background:#f2f2f2;font-weight:700}
+.sv-self{margin-top:-1px}
+
 @media print{
   html,body{background:#fff!important}
   body *{visibility:hidden}
   .sd-print, .sd-print *{visibility:visible}
   .sd-print{position:absolute;left:0;top:0;width:100%}
   /* 각 페이지는 '앞에서' 나눔 → 마지막 뒤 빈 페이지 없음. 첫 페이지 앞 나눔은 브라우저가 자동 무시 */
-  .sd-page,.gg-page,.ri-page{margin:0!important;border:none!important;box-shadow:none!important;width:100%!important;min-height:0!important;break-inside:avoid;break-before:page;page-break-before:always}
+  .sd-page,.gg-page,.ri-page,.sv-page{margin:0!important;border:none!important;box-shadow:none!important;width:100%!important;min-height:0!important;break-inside:avoid;break-before:page;page-break-before:always}
   .sd-print > :first-child, .sd-print > :first-child > :first-child{break-before:avoid;page-break-before:avoid}
   .sd-page{padding:10mm 12mm}
   .gg-page{padding:8mm 10mm}
   .ri-page{padding:11mm 13mm}
+  .sv-page{padding:0}
   .no-print{display:none!important}
   input::placeholder{color:transparent!important}   /* 빈 입력칸 placeholder는 인쇄 안 함 */
   /* 문서별 따로 인쇄: 인쇄 종류에 맞는 문서만 노출 */
