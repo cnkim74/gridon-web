@@ -27,6 +27,8 @@ type Survey = { key: string; sa: string; dig: string; line: string; seq: string;
 // ── 시트 헬퍼 ──────────────────────────────────────────────────────────────
 function extractSheetId(input: string): string {
   const s = (input ?? "").trim();
+  // "웹에 게시" 링크(/spreadsheets/d/e/2PACX-…/pubhtml)는 API로 못 읽음 → 감지용 특수값
+  if (/\/spreadsheets\/d\/e\//.test(s)) return "__PUBLISHED__";
   const m = s.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
   if (m) return m[1];
   if (/^[a-zA-Z0-9_-]{20,}$/.test(s)) return s;
@@ -36,17 +38,29 @@ const cell = (rows: unknown[][], r: number, c: number) => { const v = (rows[r] ?
 function normLine(s: string) { return (s ?? "").normalize("NFC").replace(/\s+/g, "").toLowerCase(); }
 function titleOfRange(range: string): string { const m = range.match(/^'?([^'!]+)'?!/); return m ? m[1] : range; }
 
+// 구글 API 응답을 JSON으로 안전 파싱. HTML(오류·로그인 페이지)이 오면 원인 구분 메시지로 던진다.
+async function fetchJson(url: string): Promise<Record<string, unknown>> {
+  const res = await fetch(url);
+  const text = await res.text();
+  let json: Record<string, unknown> | null = null;
+  try { json = JSON.parse(text); } catch { /* HTML 등 비-JSON */ }
+  if (!json) {
+    // 서버가 JSON이 아닌 HTML을 반환 → 링크/키가 API 요청에 맞지 않음
+    throw new Error("구글 서버가 데이터(JSON) 대신 웹페이지(HTML)를 반환했습니다. 시트 링크가 올바른 형식(…/spreadsheets/d/시트ID/edit)인지, API 키가 유효한지 확인하세요.");
+  }
+  const err = (json.error as { message?: string } | undefined)?.message;
+  if (!res.ok) throw new Error(err || `구글 API 오류 (${res.status})`);
+  return json;
+}
 async function sheetTitles(id: string, key: string): Promise<string[]> {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}?key=${key}&fields=sheets.properties.title`;
-  const res = await fetch(url); const json = await res.json();
-  if (!res.ok) throw new Error(json?.error?.message || `시트 조회 오류 (${res.status})`);
+  const json = await fetchJson(url);
   return ((json.sheets as { properties: { title: string } }[]) ?? []).map((s) => s.properties.title);
 }
 async function sheetsBatch(id: string, key: string, ranges: string[]): Promise<{ range: string; values?: unknown[][] }[]> {
   const qs = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values:batchGet?${qs}&majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&key=${key}`;
-  const res = await fetch(url); const json = await res.json();
-  if (!res.ok) throw new Error(json?.error?.message || `시트 값 오류 (${res.status})`);
+  const json = await fetchJson(url);
   return (json.valueRanges as { range: string; values?: unknown[][] }[]) ?? [];
 }
 
@@ -282,6 +296,7 @@ export default function GonggaSurveyDashboard() {
 
   async function load(key: string, sheetInput: string) {
     const id = extractSheetId(sheetInput);
+    if (id === "__PUBLISHED__") { setErr("‘웹에 게시’ 링크(/d/e/…/pubhtml)는 API로 읽을 수 없습니다. 브라우저 주소창의 일반 편집 링크(…/spreadsheets/d/시트ID/edit)를 넣어주세요."); return; }
     if (!key.trim() || !id) { setErr("‘지사·시트 설정’에서 API 키와 지사별 구글시트 링크를 먼저 저장하세요."); return; }
     setLoading(true); setErr(null); setSurveys([]); setSelected(null);
     try {
@@ -314,7 +329,7 @@ export default function GonggaSurveyDashboard() {
       all.sort((a, b) => (a.line + a.seq).localeCompare(b.line + b.seq, "ko", { numeric: true }));
       setSurveys(all);
     } catch (e) {
-      setErr((e as Error).message + " (Google Sheets API 활성화 + 시트 링크공개 필요)");
+      setErr((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -351,11 +366,13 @@ export default function GonggaSurveyDashboard() {
     const names = Object.keys(next);
     const j = names.includes(jisa) ? jisa : (names[0] ?? "");
     setSheets(next); setJisa(j);
-    await sba.from("app_settings").upsert([
-      { key: K_API, value: apiKey.trim() },
+    // API 키가 비어 있으면 공용 키를 덮어쓰지 않는다(다른 메뉴 인증 보호)
+    const rows: { key: string; value: string }[] = [
       { key: K_GONGGA_SHEETS, value: JSON.stringify(next) },
       { key: K_GONGGA_JISA, value: j },
-    ]);
+    ];
+    if (apiKey.trim()) rows.push({ key: K_API, value: apiKey.trim() });
+    await sba.from("app_settings").upsert(rows);
     setSavedOk(true); setShowSettings(false);
     if (apiKey.trim() && j && next[j]) load(apiKey, next[j]);
     else setSurveys([]);
