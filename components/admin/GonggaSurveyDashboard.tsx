@@ -6,9 +6,11 @@ import { supabase } from "@/lib/supabase";
 const sba = supabase as any;
 type SbaRes = { data: unknown; error: { message: string } | null };
 
-// app_settings 키 (결과보고서와 공유)
-const K_API = "drive_api_key";
-const K_SHEET = "result_sheet";
+// app_settings 키
+const K_API = "drive_api_key";          // 구글 API 키(드라이브·시트 공용, 결과보고서와 공유)
+const K_SHEET = "result_sheet";         // 결과보고서용 시트(초기 시드용)
+const K_GONGGA_SHEETS = "gongga_sheets"; // 지사별 공가조사표 구글시트 링크 (JSON: {지사: url})
+const K_GONGGA_JISA = "gongga_jisa";     // 마지막 선택 지사
 
 // 불량코드 범례(1~10)
 const BAD = ["방수장치불량", "여유장 과다", "전력선동시시설", "맨홀 천공", "관로구 파손", "구조물파손", "관로파손 유입", "통신기기시설불량", "내관 미설치", "기타(단선등)"];
@@ -211,7 +213,8 @@ function SurveySheet({ sv, sketch, onSketch, editable, ov, onCell }: {
 // ── 메인 ───────────────────────────────────────────────────────────────────
 export default function GonggaSurveyDashboard() {
   const [apiKey, setApiKey] = useState("");
-  const [sheetUrl, setSheetUrl] = useState("");
+  const [sheets, setSheets] = useState<Record<string, string>>({}); // 지사 → 시트 링크
+  const [jisa, setJisa] = useState("");                             // 선택된 지사
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -219,7 +222,10 @@ export default function GonggaSurveyDashboard() {
   const [mode, setMode] = useState<"single" | "all">("single");
   const [sketches, setSketches] = useState<Record<string, string>>({});
   const [surveyOv, setSurveyOv] = useState<Record<string, Record<string, string>>>({});
-  const [branch, setBranch] = useState("전체");
+  // 지사·시트 설정 편집
+  const [showSettings, setShowSettings] = useState(false);
+  const [editRows, setEditRows] = useState<{ name: string; url: string }[]>([]);
+  const [savedOk, setSavedOk] = useState(false);
 
   const sketchKey = (sv: Survey) => `약도:${sv.line} ${sv.seq}`.trim();
   async function saveSketch(sv: Survey, data: string) {
@@ -241,9 +247,16 @@ export default function GonggaSurveyDashboard() {
       const { data }: SbaRes = await sba.from("app_settings").select("key,value");
       const rows = (data as { key: string; value: string }[]) ?? [];
       const get = (k: string) => rows.find((r) => r.key === k)?.value ?? "";
-      const k = get(K_API), sh = get(K_SHEET);
-      setApiKey(k); setSheetUrl(sh);
-      if (k.trim() && sh.trim()) load(k, sh);
+      const k = get(K_API);
+      let sh: Record<string, string> = {};
+      try { sh = JSON.parse(get(K_GONGGA_SHEETS) || "{}"); } catch { sh = {}; }
+      // 최초 1회: 지사별 링크가 없으면 결과보고서 시트를 '기본' 지사로 시드
+      if (Object.keys(sh).length === 0 && get(K_SHEET).trim()) sh = { 기본: get(K_SHEET).trim() };
+      const names = Object.keys(sh);
+      const savedJisa = get(K_GONGGA_JISA);
+      const j = names.includes(savedJisa) ? savedJisa : (names[0] ?? "");
+      setApiKey(k); setSheets(sh); setJisa(j);
+      if (k.trim() && j && sh[j]) load(k, sh[j]);
     })();
     // 저장된 약도 로드 (line_overrides.sketch, 마이그레이션 전이면 무시)
     (async () => {
@@ -265,12 +278,11 @@ export default function GonggaSurveyDashboard() {
       }
       setSurveyOv(m);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function load(key: string, sheetInput: string) {
     const id = extractSheetId(sheetInput);
-    if (!key.trim() || !id) { setErr("결과보고서 설정에서 API 키와 구글시트 링크를 먼저 저장하세요."); return; }
+    if (!key.trim() || !id) { setErr("‘지사·시트 설정’에서 API 키와 지사별 구글시트 링크를 먼저 저장하세요."); return; }
     setLoading(true); setErr(null); setSurveys([]); setSelected(null);
     try {
       const titles = await sheetTitles(id, key.trim());
@@ -319,49 +331,104 @@ export default function GonggaSurveyDashboard() {
     window.print();
   }
 
-  // 지사(사업소명)별 필터
-  const branches = Array.from(new Set(surveys.map((s) => s.sa).filter(Boolean)));
-  const shown = branch === "전체" ? surveys : surveys.filter((s) => s.sa === branch);
+  // 지사 전환 → 선택 저장 + 해당 지사 시트 로드
+  function selectJisa(name: string) {
+    setJisa(name); setSelected(null); setMode("single");
+    sba.from("app_settings").upsert({ key: K_GONGGA_JISA, value: name });
+    if (apiKey.trim() && sheets[name]) load(apiKey, sheets[name]);
+    else { setSurveys([]); setErr(sheets[name] ? null : `‘${name}’ 지사의 시트 링크가 없습니다. ‘지사·시트 설정’에서 등록하세요.`); }
+  }
+
+  // 설정 열기 → 편집행 시드
+  function openSettings() {
+    const rows = Object.entries(sheets).map(([name, url]) => ({ name, url }));
+    setEditRows(rows.length ? rows : [{ name: "", url: "" }]);
+    setSavedOk(false); setShowSettings(true);
+  }
+  async function saveSettings() {
+    const next: Record<string, string> = {};
+    for (const r of editRows) if (r.name.trim() && r.url.trim()) next[r.name.trim()] = r.url.trim();
+    const names = Object.keys(next);
+    const j = names.includes(jisa) ? jisa : (names[0] ?? "");
+    setSheets(next); setJisa(j);
+    await sba.from("app_settings").upsert([
+      { key: K_API, value: apiKey.trim() },
+      { key: K_GONGGA_SHEETS, value: JSON.stringify(next) },
+      { key: K_GONGGA_JISA, value: j },
+    ]);
+    setSavedOk(true); setShowSettings(false);
+    if (apiKey.trim() && j && next[j]) load(apiKey, next[j]);
+    else setSurveys([]);
+  }
+
+  const shown = surveys;
   const withData = shown.filter((s) => s.tel.length || s.self.length).length;
 
   return (
     <>
       <div className="apage-head no-print">
-        <div><h1>공가조사표 (통신설비)</h1><p>구글시트 공가조사표_지사 데이터를 선로별로 읽어 통신설비 공가조사표(가로) 자동 생성</p></div>
+        <div><h1>공가조사표 (통신설비)</h1><p>지사를 선택하면 저장된 지사별 구글시트에서 통신설비 공가조사표(가로)를 자동 생성</p></div>
         {surveys.length > 0 && (
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn--ghost btn--sm" type="button" onClick={() => { setMode("all"); setSelected(null); }}>{branch === "전체" ? "전체" : branch} {shown.length}개 인쇄</button>
-            <button className="btn btn--ghost btn--sm" type="button" onClick={() => load(apiKey, sheetUrl)} disabled={loading}>새로고침</button>
+            <button className="btn btn--ghost btn--sm" type="button" onClick={() => { setMode("all"); setSelected(null); }}>{jisa || "전체"} {shown.length}개 인쇄</button>
+            <button className="btn btn--ghost btn--sm" type="button" onClick={() => sheets[jisa] && load(apiKey, sheets[jisa])} disabled={loading}>새로고침</button>
             <button className="btn btn--sm" type="button" onClick={doPrint} disabled={mode === "single" ? !selected : shown.length === 0}>🖨 인쇄 · PDF 저장</button>
           </div>
         )}
       </div>
+
+      {/* 지사 선택 바 */}
+      <div className="panel no-print" style={{ marginBottom: 14, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <strong style={{ fontSize: 13 }}>지사</strong>
+        <select value={jisa} onChange={(e) => selectJisa(e.target.value)} disabled={Object.keys(sheets).length === 0}
+          style={{ padding: "7px 12px", fontSize: 14, borderRadius: 6, border: "1px solid var(--line-2)", minWidth: 160, background: "var(--paper)", color: "inherit" }}>
+          {Object.keys(sheets).length === 0 && <option value="">등록된 지사 없음</option>}
+          {Object.keys(sheets).map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+        {jisa && surveys.length > 0 && <span style={{ fontSize: 12, color: "var(--muted)" }}>선로 {shown.length}개 · 데이터 {withData}개</span>}
+        <button className="btn btn--ghost btn--sm" type="button" onClick={openSettings} style={{ marginLeft: "auto" }}>⚙ 지사·시트 설정</button>
+      </div>
+
+      {showSettings && (
+        <div className="panel no-print" style={{ marginBottom: 14, padding: "16px 18px" }}>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>지사·시트 설정</div>
+          <label style={{ display: "block", fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>구글 API 키 (드라이브·시트 공용)</label>
+          <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="AIza…" spellCheck={false}
+            style={{ width: "100%", padding: "8px 11px", fontSize: 13, borderRadius: 6, border: "1px solid var(--line-2)", marginBottom: 14, background: "var(--paper)", color: "inherit" }} />
+          <label style={{ display: "block", fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>지사별 구글시트 링크 (지사명 + 시트 주소)</label>
+          {editRows.map((r, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input value={r.name} onChange={(e) => setEditRows((p) => p.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} placeholder="지사명 (예: 중부산지사)"
+                style={{ width: 170, padding: "8px 11px", fontSize: 13, borderRadius: 6, border: "1px solid var(--line-2)", background: "var(--paper)", color: "inherit" }} />
+              <input value={r.url} onChange={(e) => setEditRows((p) => p.map((x, j) => j === i ? { ...x, url: e.target.value } : x))} placeholder="https://docs.google.com/spreadsheets/d/…" spellCheck={false}
+                style={{ flex: 1, padding: "8px 11px", fontSize: 13, borderRadius: 6, border: "1px solid var(--line-2)", background: "var(--paper)", color: "inherit" }} />
+              <button className="btn btn--ghost btn--sm" type="button" onClick={() => setEditRows((p) => p.filter((_, j) => j !== i))}>삭제</button>
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <button className="btn btn--ghost btn--sm" type="button" onClick={() => setEditRows((p) => [...p, { name: "", url: "" }])}>+ 지사 추가</button>
+            <button className="btn btn--sm" type="button" onClick={saveSettings} style={{ marginLeft: "auto" }}>저장</button>
+            <button className="btn btn--ghost btn--sm" type="button" onClick={() => setShowSettings(false)}>닫기</button>
+          </div>
+        </div>
+      )}
+      {savedOk && !showSettings && <div className="panel no-print" style={{ marginBottom: 12, padding: "10px 16px", fontSize: 13, color: "var(--ok, #157347)" }}>✓ 설정을 저장했습니다.</div>}
 
       {err && <div className="panel no-print" style={{ marginBottom: 16, padding: "12px 18px", color: "#b3261e", fontSize: 13 }}>⚠ {err}</div>}
       {loading && <div className="panel no-print" style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>공가조사표 불러오는 중…</div>}
 
       {!loading && surveys.length === 0 && !err && (
         <div className="panel no-print" style={{ padding: "60px 20px", textAlign: "center", color: "var(--muted)" }}>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>공가조사표 데이터가 없습니다</div>
-          <div style={{ fontSize: 13 }}>결과보고서 페이지에서 구글시트를 먼저 연결·저장하세요. (같은 시트의 공가조사표_지사 탭을 읽습니다)</div>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>표시할 공가조사표가 없습니다</div>
+          <div style={{ fontSize: 13 }}>‘⚙ 지사·시트 설정’에서 지사별 구글시트 링크를 등록한 뒤, 위에서 지사를 선택하세요.</div>
         </div>
       )}
 
       {surveys.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16 }}>
           <div className="panel no-print" style={{ alignSelf: "start", maxHeight: "80vh", overflowY: "auto" }}>
-            {branches.length > 1 && (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, padding: "10px 10px 4px" }}>
-                {["전체", ...branches].map((b) => (
-                  <button key={b} type="button" onClick={() => { setBranch(b); setSelected(null); }}
-                    style={{ padding: "4px 11px", border: "1px solid var(--line-2)", borderRadius: 20, fontSize: 12, cursor: "pointer", background: branch === b ? "var(--ink)" : "transparent", color: branch === b ? "var(--paper)" : "inherit", fontWeight: branch === b ? 700 : 400 }}>
-                    {b}
-                  </button>
-                ))}
-              </div>
-            )}
             <div className="panel-body" style={{ borderBottom: "1px solid var(--line-2)", fontWeight: 700, fontSize: 13, position: "sticky", top: 0, background: "var(--paper)" }}>
-              선로 {shown.length}개 · 데이터 {withData}개
+              {jisa && <span style={{ marginRight: 6 }}>{jisa}</span>}선로 {shown.length}개 · 데이터 {withData}개
             </div>
             <div style={{ padding: 8 }}>
               {shown.map((s) => {
