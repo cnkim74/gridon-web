@@ -853,7 +853,8 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
       if (rdRaw) { try { setRd({ ...DEFAULT_RESULT, ...JSON.parse(rdRaw) }); } catch { /* ignore */ } }
       const sh = get(K_SHEET); setSheetUrl(sh);
       if (k.trim() && f.trim()) loadLinesWith(k, f);
-      if (doc === "result" && k.trim() && sh.trim()) loadSheet(k, sh);
+      // 결과보고서·지중설비별 공가조사표 모두 시트에서 전산화번호 등 자동채움
+      if (doc !== "sajin" && k.trim() && sh.trim()) loadSheet(k, sh);
     })();
     // 전산화번호 매핑 (manhole_works)
     (async () => {
@@ -929,15 +930,13 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
       { key: K_FOLDER, value: folder.trim() },
       { key: K_PROJECT, value: project.trim() || DEFAULT_PROJECT },
     ];
-    if (doc === "result") {
-      rows.push({ key: K_RESULT_DEFAULTS, value: JSON.stringify(rd) });
-      rows.push({ key: K_SHEET, value: sheetUrl.trim() });
-    }
+    if (doc === "result") rows.push({ key: K_RESULT_DEFAULTS, value: JSON.stringify(rd) });
+    if (doc !== "sajin") rows.push({ key: K_SHEET, value: sheetUrl.trim() });
     const { error }: SbaRes = await sba.from("app_settings").upsert(rows);
     if (error) { setErr("설정 저장 실패: " + (error as { message: string }).message); return; }
     setSavedOk(true);
     setTimeout(() => setSavedOk(false), 1800);
-    if (doc === "result" && apiKey.trim() && sheetUrl.trim()) loadSheet(apiKey, sheetUrl);
+    if (doc !== "sajin" && apiKey.trim() && sheetUrl.trim()) loadSheet(apiKey, sheetUrl);
   };
 
   // 구글시트(점검 데이터 원본) 로드 → 맨홀별 자동채움 맵
@@ -1056,30 +1055,32 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
             <label>공사명 (사진대지 머리말)</label>
             <input className="input" value={project} onChange={(e) => setProject(e.target.value)} />
           </div>
-          {doc === "result" && (
+          {doc !== "sajin" && (
             <div style={{ border: "1px solid var(--line-2)", borderRadius: 8, padding: "14px 16px", display: "grid", gap: 10 }}>
               <div className="field">
-                <label>점검 데이터 구글시트 링크 <span style={{ fontWeight: 400, color: "var(--muted)" }}>· 맨홀점검표·정기검사시스템 값을 실시간으로 읽어 자동 채움</span></label>
+                <label>점검 데이터 구글시트 링크 <span style={{ fontWeight: 400, color: "var(--muted)" }}>· {doc === "gongga" ? "정기검사시스템의 전산화번호 등을" : "맨홀점검표·정기검사시스템 값을"} 실시간으로 읽어 자동 채움</span></label>
                 <input className="input" placeholder="https://docs.google.com/spreadsheets/d/..." value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} />
                 <div style={{ fontSize: 12, color: sheetErr ? "#b3261e" : "var(--muted)", marginTop: 4 }}>
                   {sheetLoading ? "시트 불러오는 중…" : sheetErr ? `⚠ ${sheetErr}` : Object.keys(sheetMap).length > 0 ? `✓ 시트에서 맨홀 ${Object.keys(sheetMap).length}개 데이터 연동됨` : "저장하면 시트를 읽어 자동 채웁니다. (Google Sheets API 활성화 + 시트 링크공개 필요)"}
                 </div>
               </div>
-              <div style={{ fontWeight: 700, fontSize: 13 }}>결과보고서 공통정보 <span style={{ fontWeight: 400, color: "var(--muted)" }}>· 시트에 없는 값의 기본값 (맨홀별 값은 미리보기에서 직접 수정 가능)</span></div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                {([
-                  ["coverProject", "표지 공사명"], ["coverCompany", "표지 회사명"], ["inspectDate", "정기점검일·검사일자"],
-                  ["bonbu", "본부"], ["saeopso", "사업소"],
-                  ["inspectorOrg", "점검자 소속"], ["inspectorName", "점검자 성명"],
-                  ["checkerOrg", "검사자 소속"], ["installPos", "설치위치"],
-                  ["overall", "종합판정"],
-                ] as [keyof ResultDefaults, string][]).map(([key, label]) => (
-                  <div className="field" key={key}>
-                    <label>{label}</label>
-                    <input className="input" value={rd[key]} onChange={(e) => setRd((prev) => ({ ...prev, [key]: e.target.value }))} />
-                  </div>
-                ))}
-              </div>
+              {doc === "result" && (<>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>결과보고서 공통정보 <span style={{ fontWeight: 400, color: "var(--muted)" }}>· 시트에 없는 값의 기본값 (맨홀별 값은 미리보기에서 직접 수정 가능)</span></div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  {([
+                    ["coverProject", "표지 공사명"], ["coverCompany", "표지 회사명"], ["inspectDate", "정기점검일·검사일자"],
+                    ["bonbu", "본부"], ["saeopso", "사업소"],
+                    ["inspectorOrg", "점검자 소속"], ["inspectorName", "점검자 성명"],
+                    ["checkerOrg", "검사자 소속"], ["installPos", "설치위치"],
+                    ["overall", "종합판정"],
+                  ] as [keyof ResultDefaults, string][]).map(([key, label]) => (
+                    <div className="field" key={key}>
+                      <label>{label}</label>
+                      <input className="input" value={rd[key]} onChange={(e) => setRd((prev) => ({ ...prev, [key]: e.target.value }))} />
+                    </div>
+                  ))}
+                </div>
+              </>)}
             </div>
           )}
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
