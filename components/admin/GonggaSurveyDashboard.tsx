@@ -129,20 +129,33 @@ function SketchPad({ value, onSave }: { value: string; onSave: (d: string) => vo
   );
 }
 
+// 셀 편집칸 (화면 입력 → blur 저장, 인쇄 시 값 그대로)
+function SvCell({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [v, setV] = useState(value);
+  const [p, setP] = useState(value);
+  if (p !== value) { setP(value); setV(value); }
+  return <input className="sv-cell-input" value={v} onChange={(e) => setV(e.target.value)} onBlur={() => { if (v !== value) onSave(v.trim()); }} />;
+}
+
 // ── 공가조사표 한 장 ───────────────────────────────────────────────────────
-function SurveySheet({ sv, sketch, onSketch, editable }: { sv: Survey; sketch: string; onSketch?: (d: string) => void; editable?: boolean }) {
+function SurveySheet({ sv, sketch, onSketch, editable, ov, onCell }: {
+  sv: Survey; sketch: string; onSketch?: (d: string) => void; editable?: boolean; ov?: Record<string, string>; onCell?: (id: string, v: string) => void;
+}) {
   const telRows = Math.max(TEL_MINROWS, sv.tel.length);
   const selfRows = Math.max(SELF_MINROWS, sv.self.length);
+  // 셀: 편집모드면 입력칸, 아니면 텍스트. 값 = 수정본(ov) 우선, 없으면 시트값
+  const c = (id: string, sheetVal: string) =>
+    editable && onCell ? <SvCell value={ov?.[id] ?? sheetVal} onSave={(v) => onCell(id, v)} /> : (ov?.[id] ?? sheetVal);
   return (
     <div className="sv-page doc-font">
       <table className="sv-info"><tbody>
         <tr>
-          <td className="lab">사업소명</td><td>{sv.sa}</td>
-          <td className="lab">전산화번호</td><td>{sv.dig}</td>
-          <td className="lab">선로명</td><td>{sv.line}</td>
-          <td className="lab">선로번호</td><td>{sv.seq}</td>
-          <td className="lab">비고</td><td className="sv-bigo">{sv.bigo}</td>
-          <td className="lab">회선수</td><td className="sv-hoe">{sv.hoe}</td>
+          <td className="lab">사업소명</td><td>{c("sa", sv.sa)}</td>
+          <td className="lab">전산화번호</td><td>{c("dig", sv.dig)}</td>
+          <td className="lab">선로명</td><td>{c("line", sv.line)}</td>
+          <td className="lab">선로번호</td><td>{c("seq", sv.seq)}</td>
+          <td className="lab">비고</td><td className="sv-bigo">{c("bigo", sv.bigo)}</td>
+          <td className="lab">회선수</td><td className="sv-hoe">{c("hoe", sv.hoe)}</td>
         </tr>
       </tbody></table>
       <table className="sv-legend"><tbody>
@@ -159,10 +172,10 @@ function SurveySheet({ sv, sketch, onSketch, editable }: { sv: Survey; sketch: s
         <div className="sv-telwrap">
           <div className="sv-sect">통신설비 시설내역</div>
           <table className="sv-tel">
-            <thead><tr>{TEL_COLS.map((c) => <th key={c}>{c}</th>)}</tr></thead>
+            <thead><tr>{TEL_COLS.map((col) => <th key={col}>{col}</th>)}</tr></thead>
             <tbody>
               {Array.from({ length: telRows }).map((_, i) => (
-                <tr key={i}>{TEL_COLS.map((_, j) => <td key={j}>{sv.tel[i]?.[j] ?? ""}</td>)}</tr>
+                <tr key={i}>{TEL_COLS.map((_, j) => <td key={j}>{c(`t${i}_${j}`, sv.tel[i]?.[j] ?? "")}</td>)}</tr>
               ))}
             </tbody>
           </table>
@@ -170,10 +183,10 @@ function SurveySheet({ sv, sketch, onSketch, editable }: { sv: Survey; sketch: s
       </div>
       <div className="sv-self-title">자기설비 내역</div>
       <table className="sv-self" style={{ flexGrow: selfRows }}>
-        <thead><tr>{SELF_COLS.map((c) => <th key={c}>{c}</th>)}</tr></thead>
+        <thead><tr>{SELF_COLS.map((col) => <th key={col}>{col}</th>)}</tr></thead>
         <tbody>
           {Array.from({ length: selfRows }).map((_, i) => (
-            <tr key={i}>{SELF_COLS.map((_, j) => <td key={j}>{sv.self[i]?.[j] ?? ""}</td>)}</tr>
+            <tr key={i}>{SELF_COLS.map((_, j) => <td key={j}>{c(`s${i}_${j}`, sv.self[i]?.[j] ?? "")}</td>)}</tr>
           ))}
         </tbody>
       </table>
@@ -191,6 +204,7 @@ export default function GonggaSurveyDashboard() {
   const [selected, setSelected] = useState<Survey | null>(null);
   const [mode, setMode] = useState<"single" | "all">("single");
   const [sketches, setSketches] = useState<Record<string, string>>({});
+  const [surveyOv, setSurveyOv] = useState<Record<string, Record<string, string>>>({});
   const [branch, setBranch] = useState("전체");
 
   const sketchKey = (sv: Survey) => `약도:${sv.line} ${sv.seq}`.trim();
@@ -198,6 +212,14 @@ export default function GonggaSurveyDashboard() {
     const k = sketchKey(sv);
     setSketches((prev) => ({ ...prev, [k]: data }));
     await sba.from("line_overrides").upsert({ line_name: k, sketch: data, updated_at: new Date().toISOString() });
+  }
+  const cellKey = (sv: Survey) => `공가:${sv.line} ${sv.seq}`.trim();
+  async function saveCell(sv: Survey, id: string, value: string) {
+    const k = cellKey(sv);
+    const next = { ...(surveyOv[k] ?? {}), [id]: value };
+    if (!value) delete next[id];
+    setSurveyOv((prev) => ({ ...prev, [k]: next }));
+    await sba.from("line_overrides").upsert({ line_name: k, survey: next, updated_at: new Date().toISOString() });
   }
 
   useEffect(() => {
@@ -218,6 +240,16 @@ export default function GonggaSurveyDashboard() {
         if (r.line_name?.startsWith("약도:") && r.sketch) m[r.line_name] = r.sketch;
       }
       setSketches(m);
+    })();
+    // 저장된 셀 수정본 로드 (line_overrides.survey, 마이그레이션 전이면 무시)
+    (async () => {
+      const res: SbaRes = await sba.from("line_overrides").select("line_name,survey");
+      if (res.error) return;
+      const m: Record<string, Record<string, string>> = {};
+      for (const r of (res.data as { line_name: string; survey: Record<string, string> | null }[]) ?? []) {
+        if (r.line_name?.startsWith("공가:") && r.survey) m[r.line_name] = r.survey;
+      }
+      setSurveyOv(m);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -314,14 +346,14 @@ export default function GonggaSurveyDashboard() {
 
           <div>
             {mode === "single" && selected && (
-              <div className="sd-print"><SurveySheet sv={selected} sketch={sketches[sketchKey(selected)] ?? ""} onSketch={(d) => saveSketch(selected, d)} editable /></div>
+              <div className="sd-print"><SurveySheet sv={selected} sketch={sketches[sketchKey(selected)] ?? ""} onSketch={(d) => saveSketch(selected, d)} editable ov={surveyOv[cellKey(selected)]} onCell={(id, v) => saveCell(selected, id, v)} /></div>
             )}
             {mode === "single" && !selected && (
               <div className="panel no-print" style={{ padding: "60px 20px", textAlign: "center", color: "var(--muted)", fontSize: 13 }}>좌측에서 선로를 선택하세요.</div>
             )}
             {mode === "all" && (
               <div className="sd-print">
-                {shown.map((s) => <Fragment key={s.key}><SurveySheet sv={s} sketch={sketches[sketchKey(s)] ?? ""} /></Fragment>)}
+                {shown.map((s) => <Fragment key={s.key}><SurveySheet sv={s} sketch={sketches[sketchKey(s)] ?? ""} ov={surveyOv[cellKey(s)]} /></Fragment>)}
               </div>
             )}
           </div>
