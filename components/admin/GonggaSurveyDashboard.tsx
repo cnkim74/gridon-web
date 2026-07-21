@@ -32,6 +32,7 @@ function extractSheetId(input: string): string {
 }
 const cell = (rows: unknown[][], r: number, c: number) => { const v = (rows[r] ?? [])[c]; return v == null ? "" : String(v).trim(); };
 function normLine(s: string) { return (s ?? "").normalize("NFC").replace(/\s+/g, "").toLowerCase(); }
+function titleOfRange(range: string): string { const m = range.match(/^'?([^'!]+)'?!/); return m ? m[1] : range; }
 
 async function sheetTitles(id: string, key: string): Promise<string[]> {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}?key=${key}&fields=sheets.properties.title`;
@@ -69,6 +70,19 @@ function parseSurvey(rows: unknown[][]): Survey[] {
   }
   return out;
 }
+
+// 정기검사시스템_{지사} 시트 → 맨홀 기준목록(선로·선호·전산화). 공가조사표 탭에 없는 맨홀도 포함하기 위한 소스.
+function parseRecList(rows: unknown[][], jisa: string): Survey[] {
+  const out: Survey[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    if (!(rows[i] ?? []).some((c) => String(c ?? "").includes("검사기록표"))) continue;
+    const line = cell(rows, i + 3, 2), seq = cell(rows, i + 3, 4);
+    if (!line && !seq) continue;
+    out.push({ key: normLine(line + seq), sa: jisa, dig: cell(rows, i + 3, 7), line, seq, bigo: "", hoe: "", tel: [], self: [] });
+  }
+  return out;
+}
+const jisaOfTitle = (title: string) => title.replace(/^정기검사시스템_/, "").trim();
 
 // ── 약도 직접 그리기 (아이패드 펜슬·터치 / PC 마우스) ─────────────────────────
 function SketchPad({ value, onSave }: { value: string; onSave: (d: string) => void }) {
@@ -260,11 +274,31 @@ export default function GonggaSurveyDashboard() {
     setLoading(true); setErr(null); setSurveys([]); setSelected(null);
     try {
       const titles = await sheetTitles(id, key.trim());
-      const wanted = titles.filter((t) => t.startsWith("공가조사표") && !t.includes("양식"));
-      if (wanted.length === 0) { setErr("시트에서 '공가조사표_*' 탭을 찾지 못했습니다."); return; }
-      const vrs = await sheetsBatch(id, key.trim(), wanted);
+      const gongga = titles.filter((t) => t.startsWith("공가조사표") && !t.includes("양식"));
+      const jeonggi = titles.filter((t) => t.startsWith("정기검사시스템"));
+      if (gongga.length === 0 && jeonggi.length === 0) { setErr("시트에서 '공가조사표_*' 또는 '정기검사시스템_*' 탭을 찾지 못했습니다."); return; }
+      const vrs = await sheetsBatch(id, key.trim(), [...gongga, ...jeonggi]);
+      // 공가조사표 자동채움 데이터
+      const svMap = new Map<string, Survey>();
+      for (const vr of vrs) {
+        if (!titleOfRange(vr.range).startsWith("공가조사표")) continue;
+        for (const sv of parseSurvey(vr.values ?? [])) svMap.set(sv.key, sv);
+      }
+      // 정기검사시스템 = 맨홀 기준목록(결과보고서와 동일 개수). 공가조사표 탭에 없으면 빈 양식으로 채움.
       const all: Survey[] = [];
-      for (const vr of vrs) all.push(...parseSurvey(vr.values ?? []));
+      const seen = new Set<string>();
+      for (const vr of vrs) {
+        const title = titleOfRange(vr.range);
+        if (!title.startsWith("정기검사시스템")) continue;
+        for (const base of parseRecList(vr.values ?? [], jisaOfTitle(title))) {
+          if (seen.has(base.key)) continue;
+          seen.add(base.key);
+          const sv = svMap.get(base.key);
+          all.push(sv ? { ...sv, sa: sv.sa || base.sa, dig: sv.dig || base.dig } : base);
+        }
+      }
+      // 정기검사시스템에 없고 공가조사표에만 있는 맨홀도 포함
+      for (const sv of svMap.values()) if (!seen.has(sv.key)) { seen.add(sv.key); all.push(sv); }
       all.sort((a, b) => (a.line + a.seq).localeCompare(b.line + b.seq, "ko", { numeric: true }));
       setSurveys(all);
     } catch (e) {
