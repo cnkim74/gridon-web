@@ -66,7 +66,13 @@ function titleOfRange(range: string): string { const m = range.match(/^'?([^'!]+
 
 // 구글 API 응답을 JSON으로 안전 파싱. HTML(오류·로그인 페이지)이 오면 어느 리소스인지 밝혀 던진다.
 async function fetchJson(url: string, resource: string, hint: string): Promise<Record<string, unknown>> {
-  const res = await fetch(url);
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch (e) {
+    // fetch 자체 실패(네트워크·CORS·차단) — 리소스명을 밝혀 던진다
+    throw new Error(`[${resource}] 네트워크 요청이 전송되지 못했습니다(${(e as Error).message}). ${hint}, 그리고 해당 링크가 “링크가 있는 모든 사용자·뷰어”로 공개됐는지 확인하세요.`);
+  }
   const text = await res.text();
   let json: Record<string, unknown> | null = null;
   try { json = JSON.parse(text); } catch { /* HTML 등 비-JSON */ }
