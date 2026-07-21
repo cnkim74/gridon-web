@@ -39,7 +39,7 @@ async function driveList(folderId: string, apiKey: string): Promise<DriveFile[]>
   const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
   const url = `https://www.googleapis.com/drive/v3/files?q=${q}&key=${apiKey}` +
     `&fields=files(id,name,mimeType)&pageSize=1000&orderBy=name&supportsAllDrives=true&includeItemsFromAllDrives=true`;
-  const json = await fetchJson(url);
+  const json = await fetchJson(url, "드라이브 폴더", "폴더 링크가 …/drive/folders/폴더ID 형식인지");
   return (json.files as DriveFile[]) ?? [];
 }
 // 폴더/선로명 → 선로명(문자) + 선호번호 분리 ("국제M161" → 국제 / M161)
@@ -64,29 +64,29 @@ const cell = (rows: unknown[][], r: number, c: number) => { const v = (rows[r] ?
 function normLine(s: string) { return (s ?? "").normalize("NFC").replace(/\s+/g, "").toLowerCase(); }
 function titleOfRange(range: string): string { const m = range.match(/^'?([^'!]+)'?!/); return m ? m[1] : range; }
 
-// 구글 API 응답을 JSON으로 안전 파싱. HTML(오류·로그인 페이지)이 오면 원인 구분 메시지로 던진다.
-async function fetchJson(url: string): Promise<Record<string, unknown>> {
+// 구글 API 응답을 JSON으로 안전 파싱. HTML(오류·로그인 페이지)이 오면 어느 리소스인지 밝혀 던진다.
+async function fetchJson(url: string, resource: string, hint: string): Promise<Record<string, unknown>> {
   const res = await fetch(url);
   const text = await res.text();
   let json: Record<string, unknown> | null = null;
   try { json = JSON.parse(text); } catch { /* HTML 등 비-JSON */ }
   if (!json) {
     // 서버가 JSON이 아닌 HTML을 반환 → 링크/키가 API 요청에 맞지 않음
-    throw new Error("구글 서버가 데이터(JSON) 대신 웹페이지(HTML)를 반환했습니다. 시트 링크가 올바른 형식(…/spreadsheets/d/시트ID/edit)인지, API 키가 유효한지 확인하세요.");
+    throw new Error(`[${resource}] 구글 서버가 데이터(JSON) 대신 웹페이지(HTML)를 반환했습니다. ${hint} 또는 API 키가 유효한지 확인하세요.`);
   }
   const err = (json.error as { message?: string } | undefined)?.message;
-  if (!res.ok) throw new Error(err || `구글 API 오류 (${res.status})`);
+  if (!res.ok) throw new Error(`[${resource}] ${err || `구글 API 오류 (${res.status})`}`);
   return json;
 }
 async function sheetTitles(id: string, key: string): Promise<string[]> {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}?key=${key}&fields=sheets.properties.title`;
-  const json = await fetchJson(url);
+  const json = await fetchJson(url, "구글시트", "시트 링크가 …/spreadsheets/d/시트ID/edit 형식인지");
   return ((json.sheets as { properties: { title: string } }[]) ?? []).map((s) => s.properties.title);
 }
 async function sheetsBatch(id: string, key: string, ranges: string[]): Promise<{ range: string; values?: unknown[][] }[]> {
   const qs = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values:batchGet?${qs}&majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&key=${key}`;
-  const json = await fetchJson(url);
+  const json = await fetchJson(url, "구글시트", "시트 링크가 …/spreadsheets/d/시트ID/edit 형식인지");
   return (json.valueRanges as { range: string; values?: unknown[][] }[]) ?? [];
 }
 
