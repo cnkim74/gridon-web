@@ -53,6 +53,8 @@ function splitLine(name: string): { title: string; seq: string } {
 // ── 시트 헬퍼 ──────────────────────────────────────────────────────────────
 function extractSheetId(input: string): string {
   const s = (input ?? "").trim();
+  // 드라이브 폴더 링크를 시트 칸에 잘못 넣은 경우 감지
+  if (/\/(drive\/)?folders\//.test(s)) return "__FOLDER__";
   // "웹에 게시" 링크(/spreadsheets/d/e/2PACX-…/pubhtml)는 API로 못 읽음 → 감지용 특수값
   if (/\/spreadsheets\/d\/e\//.test(s)) return "__PUBLISHED__";
   const m = s.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
@@ -356,6 +358,7 @@ export default function GonggaSurveyDashboard() {
   // 구글시트(점검 데이터 원본) → 선로별 공가조사표 자동채움 맵
   async function loadSheet(key: string, sheetInput: string) {
     const id = extractSheetId(sheetInput);
+    if (id === "__FOLDER__") { setSheetErr("시트 칸에 ‘드라이브 폴더’ 링크가 들어가 있습니다. 스프레드시트 링크(…/spreadsheets/d/시트ID/edit)로 바꿔주세요."); return; }
     if (id === "__PUBLISHED__") { setSheetErr("‘웹에 게시’ 링크(/d/e/…/pubhtml)는 API로 읽을 수 없습니다. 일반 편집 링크(…/spreadsheets/d/시트ID/edit)를 넣어주세요."); return; }
     if (!key.trim() || !id) { setSheetErr("API 키와 구글시트 링크를 먼저 입력·저장하세요."); return; }
     setSheetLoading(true); setSheetErr(null);
