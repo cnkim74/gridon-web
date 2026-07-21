@@ -7,9 +7,9 @@ const sba = supabase as any;
 type SbaRes = { data: unknown; error: { message: string } | null };
 
 // app_settings 키 (결과보고서와 공유)
-const K_API = "drive_api_key";      // 구글 API 키(드라이브·시트 공용)
-const K_SHEET = "result_sheet";     // 점검 데이터 구글시트 링크(결과보고서와 동일)
-const K_GONGGA_JISA = "gongga_jisa"; // 마지막 선택 지사 필터
+const K_API = "drive_api_key";   // 구글 API 키(드라이브·시트 공용)
+const K_FOLDER = "report_folder"; // 구글 드라이브 폴더 링크(결과보고서와 동일)
+const K_SHEET = "result_sheet";  // 점검 데이터 구글시트 링크(결과보고서와 동일)
 
 // 불량코드 범례(1~10)
 const BAD = ["방수장치불량", "여유장 과다", "전력선동시시설", "맨홀 천공", "관로구 파손", "구조물파손", "관로파손 유입", "통신기기시설불량", "내관 미설치", "기타(단선등)"];
@@ -22,6 +22,33 @@ const SELF_CIDX = [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19
 const TEL_MINROWS = 13, SELF_MINROWS = 13;
 
 type Survey = { key: string; sa: string; dig: string; line: string; seq: string; bigo: string; hoe: string; tel: string[][]; self: string[][] };
+
+// ── 드라이브 헬퍼 (결과보고서와 동일 방식: 폴더 → 선로 하위폴더 목록) ─────────
+type DriveFile = { id: string; name: string; mimeType: string };
+type Line = { id: string; name: string };
+function extractFolderId(input: string): string {
+  const s = (input ?? "").trim();
+  const m = s.match(/\/folders\/([a-zA-Z0-9_-]+)/) || s.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(s)) return s;
+  return s;
+}
+const isFolder = (f: DriveFile) => f.mimeType === "application/vnd.google-apps.folder";
+const isImage = (f: DriveFile) => f.mimeType?.startsWith("image/");
+async function driveList(folderId: string, apiKey: string): Promise<DriveFile[]> {
+  const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+  const url = `https://www.googleapis.com/drive/v3/files?q=${q}&key=${apiKey}` +
+    `&fields=files(id,name,mimeType)&pageSize=1000&orderBy=name&supportsAllDrives=true&includeItemsFromAllDrives=true`;
+  const json = await fetchJson(url);
+  return (json.files as DriveFile[]) ?? [];
+}
+// 폴더/선로명 → 선로명(문자) + 선호번호 분리 ("국제M161" → 국제 / M161)
+function splitLine(name: string): { title: string; seq: string } {
+  const s = (name ?? "").normalize("NFC").trim();
+  const m = s.match(/^(.*?)\s*([A-Za-z]*\d[\w-]*)$/);
+  if (m) return { title: m[1].trim(), seq: m[2].trim() };
+  return { title: s, seq: "" };
+}
 
 // ── 시트 헬퍼 ──────────────────────────────────────────────────────────────
 function extractSheetId(input: string): string {
@@ -225,17 +252,29 @@ function SurveySheet({ sv, sketch, onSketch, editable, ov, onCell }: {
 
 // ── 메인 ───────────────────────────────────────────────────────────────────
 export default function GonggaSurveyDashboard() {
-  const [apiKey, setApiKey] = useState("");        // 공용 구글 API 키(다른 메뉴와 공유)
-  const [sheetUrl, setSheetUrl] = useState("");    // 공유 점검 데이터 시트(result_sheet, 다른 메뉴와 동일)
-  const [surveys, setSurveys] = useState<Survey[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [apiKey, setApiKey] = useState("");     // 공용 구글 API 키(다른 메뉴와 공유)
+  const [folder, setFolder] = useState("");     // 구글 드라이브 폴더 링크(결과보고서와 동일)
+  const [sheetUrl, setSheetUrl] = useState(""); // 점검 데이터 시트(result_sheet, 표 자동채움)
+  const [lines, setLines] = useState<Line[]>([]);        // 선로 목록(드라이브 하위폴더)
+  const [svMap, setSvMap] = useState<Record<string, Survey>>({}); // 선로 → 공가조사표 시트값
+  const [loadingLines, setLoadingLines] = useState(false);
+  const [sheetLoading, setSheetLoading] = useState(false);
+  const [sheetErr, setSheetErr] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Survey | null>(null);
+  const [selected, setSelected] = useState<Line | null>(null);
   const [mode, setMode] = useState<"single" | "all">("single");
   const [sketches, setSketches] = useState<Record<string, string>>({});
   const [surveyOv, setSurveyOv] = useState<Record<string, Record<string, string>>>({});
-  const [branch, setBranch] = useState("전체");     // 지사 필터(선택 기억)
   const [savedOk, setSavedOk] = useState(false);
+
+  // 선로(드라이브 폴더) → Survey (시트값 있으면 자동채움, 없으면 빈 양식)
+  const surveyOf = (line: Line): Survey => {
+    const key = normLine(line.name);
+    const base = svMap[key];
+    if (base) return base;
+    const { title, seq } = splitLine(line.name);
+    return { key, sa: "", dig: "", line: title, seq, bigo: "", hoe: "", tel: [], self: [] };
+  };
 
   const sketchKey = (sv: Survey) => `약도:${sv.line} ${sv.seq}`.trim();
   async function saveSketch(sv: Survey, data: string) {
@@ -257,10 +296,10 @@ export default function GonggaSurveyDashboard() {
       const { data }: SbaRes = await sba.from("app_settings").select("key,value");
       const rows = (data as { key: string; value: string }[]) ?? [];
       const get = (k: string) => rows.find((r) => r.key === k)?.value ?? "";
-      const k = get(K_API), sh = get(K_SHEET);
-      const savedJisa = get(K_GONGGA_JISA);
-      setApiKey(k); setSheetUrl(sh); if (savedJisa) setBranch(savedJisa);
-      if (k.trim() && sh.trim()) load(k, sh);
+      const k = get(K_API), f = get(K_FOLDER), sh = get(K_SHEET);
+      setApiKey(k); setFolder(f); setSheetUrl(sh);
+      if (k.trim() && f.trim()) loadLinesWith(k, f);
+      if (k.trim() && sh.trim()) loadSheet(k, sh);
     })();
     // 저장된 약도 로드 (line_overrides.sketch, 마이그레이션 전이면 무시)
     (async () => {
@@ -284,44 +323,62 @@ export default function GonggaSurveyDashboard() {
     })();
   }, []);
 
-  async function load(key: string, sheetInput: string) {
+  // 선로 목록 불러오기 (결과보고서와 동일: 폴더 → 하위 선로 폴더)
+  async function loadLinesWith(key: string, folderInput: string) {
+    if (!key.trim() || !folderInput.trim()) { setErr("API 키와 폴더 링크를 먼저 입력·저장하세요."); return; }
+    setErr(null); setLoadingLines(true); setLines([]); setSelected(null);
+    try {
+      const fid = extractFolderId(folderInput);
+      const items = await driveList(fid, key.trim());
+      const subFolders = items.filter(isFolder);
+      if (subFolders.length > 0) {
+        const sorted = subFolders.map((f) => ({ id: f.id, name: f.name }))
+          .sort((a, b) => a.name.localeCompare(b.name, "ko", { numeric: true }));
+        setLines(sorted);
+      } else if (items.some(isImage)) {
+        setLines([{ id: fid, name: "(이 폴더)" }]);
+      } else {
+        setErr("폴더 안에 선로 하위폴더도, 사진도 없습니다. 폴더 링크와 공개 설정을 확인하세요.");
+      }
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setLoadingLines(false);
+    }
+  }
+
+  // 구글시트(점검 데이터 원본) → 선로별 공가조사표 자동채움 맵
+  async function loadSheet(key: string, sheetInput: string) {
     const id = extractSheetId(sheetInput);
-    if (id === "__PUBLISHED__") { setErr("‘웹에 게시’ 링크(/d/e/…/pubhtml)는 API로 읽을 수 없습니다. 브라우저 주소창의 일반 편집 링크(…/spreadsheets/d/시트ID/edit)를 넣어주세요."); return; }
-    if (!key.trim() || !id) { setErr("⚙ 설정에서 구글시트 링크를 먼저 저장하세요. (API 키는 결과보고서와 공용)"); return; }
-    setLoading(true); setErr(null); setSurveys([]); setSelected(null);
+    if (id === "__PUBLISHED__") { setSheetErr("‘웹에 게시’ 링크(/d/e/…/pubhtml)는 API로 읽을 수 없습니다. 일반 편집 링크(…/spreadsheets/d/시트ID/edit)를 넣어주세요."); return; }
+    if (!key.trim() || !id) { setSheetErr("API 키와 구글시트 링크를 먼저 입력·저장하세요."); return; }
+    setSheetLoading(true); setSheetErr(null);
     try {
       const titles = await sheetTitles(id, key.trim());
       const gongga = titles.filter((t) => t.startsWith("공가조사표") && !t.includes("양식"));
       const jeonggi = titles.filter((t) => t.startsWith("정기검사시스템"));
-      if (gongga.length === 0 && jeonggi.length === 0) { setErr("시트에서 '공가조사표_*' 또는 '정기검사시스템_*' 탭을 찾지 못했습니다."); return; }
+      if (gongga.length === 0 && jeonggi.length === 0) { setSheetErr("시트에서 '공가조사표_*' 또는 '정기검사시스템_*' 탭을 찾지 못했습니다."); return; }
       const vrs = await sheetsBatch(id, key.trim(), [...gongga, ...jeonggi]);
-      // 공가조사표 자동채움 데이터
-      const svMap = new Map<string, Survey>();
+      const m: Record<string, Survey> = {};
       for (const vr of vrs) {
         if (!titleOfRange(vr.range).startsWith("공가조사표")) continue;
-        for (const sv of parseSurvey(vr.values ?? [])) svMap.set(sv.key, sv);
+        for (const sv of parseSurvey(vr.values ?? [])) m[sv.key] = sv;
       }
-      // 정기검사시스템 = 맨홀 기준목록(결과보고서와 동일 개수). 공가조사표 탭에 없으면 빈 양식으로 채움.
-      const all: Survey[] = [];
-      const seen = new Set<string>();
+      // 정기검사시스템의 전산화번호·사업소명을 빈 값에 보강
       for (const vr of vrs) {
         const title = titleOfRange(vr.range);
         if (!title.startsWith("정기검사시스템")) continue;
         for (const base of parseRecList(vr.values ?? [], jisaOfTitle(title))) {
-          if (seen.has(base.key)) continue;
-          seen.add(base.key);
-          const sv = svMap.get(base.key);
-          all.push(sv ? { ...sv, sa: sv.sa || base.sa, dig: sv.dig || base.dig } : base);
+          const ex = m[base.key];
+          if (ex) m[base.key] = { ...ex, sa: ex.sa || base.sa, dig: ex.dig || base.dig };
+          else m[base.key] = base;
         }
       }
-      // 정기검사시스템에 없고 공가조사표에만 있는 맨홀도 포함
-      for (const sv of svMap.values()) if (!seen.has(sv.key)) { seen.add(sv.key); all.push(sv); }
-      all.sort((a, b) => (a.line + a.seq).localeCompare(b.line + b.seq, "ko", { numeric: true }));
-      setSurveys(all);
+      setSvMap(m);
     } catch (e) {
-      setErr((e as Error).message);
+      setSheetErr((e as Error).message);
     } finally {
-      setLoading(false);
+      setSheetLoading(false);
     }
   }
 
@@ -336,93 +393,87 @@ export default function GonggaSurveyDashboard() {
     window.print();
   }
 
-  // 설정 저장(다른 메뉴와 동일 방식: 공유 시트 링크만 저장, API 키는 공용이라 건드리지 않음)
+  // 설정 저장 (결과보고서와 동일: 폴더·시트 링크 저장, API 키는 공용이라 건드리지 않음)
   const saveSettings = async () => {
-    const { error }: SbaRes = await sba.from("app_settings").upsert([{ key: K_SHEET, value: sheetUrl.trim() }]);
+    const { error }: SbaRes = await sba.from("app_settings").upsert([
+      { key: K_FOLDER, value: folder.trim() },
+      { key: K_SHEET, value: sheetUrl.trim() },
+    ]);
     if (error) { setErr("설정 저장 실패: " + error.message); return; }
     setSavedOk(true); setTimeout(() => setSavedOk(false), 1800);
-    if (apiKey.trim() && sheetUrl.trim()) load(apiKey, sheetUrl);
+    if (apiKey.trim() && folder.trim()) loadLinesWith(apiKey, folder);
+    if (apiKey.trim() && sheetUrl.trim()) loadSheet(apiKey, sheetUrl);
   };
-  // 지사 필터 전환(선택 기억)
-  function selectBranch(name: string) {
-    setBranch(name); setSelected(null); setMode("single");
-    sba.from("app_settings").upsert({ key: K_GONGGA_JISA, value: name });
-  }
 
-  // 지사(사업소명)별 필터
-  const branches = Array.from(new Set(surveys.map((s) => s.sa).filter(Boolean)));
-  const shown = branch === "전체" ? surveys : surveys.filter((s) => s.sa === branch);
-  const withData = shown.filter((s) => s.tel.length || s.self.length).length;
+  const selectedSv = selected ? surveyOf(selected) : null;
 
   return (
     <>
       <div className="apage-head no-print">
-        <div><h1>공가조사표 (통신설비)</h1><p>결과보고서와 같은 점검 데이터 구글시트를 읽어 선로별 통신설비 공가조사표(가로)를 자동 생성</p></div>
-        {surveys.length > 0 && (
+        <div><h1>공가조사표 (통신설비)</h1><p>결과보고서와 동일하게 드라이브 폴더의 선로 목록을 불러오고, 시트값으로 통신설비 공가조사표(가로)를 자동 채움</p></div>
+        {lines.length > 0 && (
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn--ghost btn--sm" type="button" onClick={() => { setMode("all"); setSelected(null); }}>{branch === "전체" ? "전체" : branch} {shown.length}개 인쇄</button>
-            <button className="btn btn--ghost btn--sm" type="button" onClick={() => load(apiKey, sheetUrl)} disabled={loading}>새로고침</button>
-            <button className="btn btn--sm" type="button" onClick={doPrint} disabled={mode === "single" ? !selected : shown.length === 0}>🖨 인쇄 · PDF 저장</button>
+            <button className="btn btn--ghost btn--sm" type="button" onClick={() => { setMode("all"); setSelected(null); }}>전체 {lines.length}개 인쇄</button>
+            <button className="btn btn--ghost btn--sm" type="button" onClick={() => loadLinesWith(apiKey, folder)} disabled={loadingLines}>새로고침</button>
+            <button className="btn btn--sm" type="button" onClick={doPrint} disabled={mode === "single" ? !selected : lines.length === 0}>🖨 인쇄 · PDF 저장</button>
           </div>
         )}
       </div>
 
-      {/* 설정 (다른 메뉴와 동일: ⚙ 설정 details 패널) */}
-      <details className="panel no-print" style={{ marginBottom: 16 }} open={!sheetUrl}>
-        <summary style={{ cursor: "pointer", padding: "14px 20px", fontWeight: 700, fontSize: 14 }}>⚙ 설정</summary>
+      {/* 설정 (결과보고서와 동일: ⚙ 폴더 설정 details 패널) */}
+      <details className="panel no-print" style={{ marginBottom: 16 }} open={!folder}>
+        <summary style={{ cursor: "pointer", padding: "14px 20px", fontWeight: 700, fontSize: 14 }}>⚙ 폴더 설정</summary>
         <div className="panel-body" style={{ borderTop: "1px solid var(--line-2)", display: "grid", gap: 12 }}>
           <div className="field">
-            <label>점검 데이터 구글시트 링크 <span style={{ fontWeight: 400, color: "var(--muted)" }}>· 결과보고서와 동일 시트 (공가조사표_지사·정기검사시스템_지사 탭)</span></label>
+            <label>구글 드라이브 폴더 링크 <span style={{ fontWeight: 400, color: "var(--muted)" }}>· 결과보고서와 동일 폴더 (하위 선로 폴더 목록)</span></label>
+            <input className="input" placeholder="https://drive.google.com/drive/folders/..." value={folder} onChange={(e) => setFolder(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>점검 데이터 구글시트 링크 <span style={{ fontWeight: 400, color: "var(--muted)" }}>· 공가조사표_지사·정기검사시스템_지사 값을 실시간으로 읽어 자동 채움</span></label>
             <input className="input" placeholder="https://docs.google.com/spreadsheets/d/..." value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} />
+            <div style={{ fontSize: 12, color: sheetErr ? "#b3261e" : "var(--muted)", marginTop: 4 }}>
+              {sheetLoading ? "시트 불러오는 중…" : sheetErr ? `⚠ ${sheetErr}` : Object.keys(svMap).length > 0 ? `✓ 시트에서 공가조사표 ${Object.keys(svMap).length}개 데이터 연동됨` : "저장하면 시트를 읽어 자동 채웁니다. (Google Sheets API 활성화 + 시트 링크공개 필요)"}
+            </div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button className="btn btn--sm" type="button" onClick={saveSettings}>저장</button>
-            <button className="btn btn--ghost btn--sm" type="button" onClick={() => load(apiKey, sheetUrl)} disabled={loading}>공가조사표 불러오기</button>
+            <button className="btn btn--ghost btn--sm" type="button" onClick={() => loadLinesWith(apiKey, folder)} disabled={loadingLines}>선로 목록 불러오기</button>
             {savedOk && <span style={{ fontSize: 13, color: "#1f7a3d" }}>✓ 저장됨</span>}
           </div>
           <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, margin: 0 }}>
-            · 결과보고서 메뉴에서 시트를 이미 저장했다면 자동으로 연동되며, 여기서 저장하면 결과보고서에도 동일하게 반영됩니다.<br />
-            · 구글 API 키는 결과보고서와 공용입니다. (별도 입력 불필요)<br />
-            · 시트를 “링크가 있는 모든 사용자 · 뷰어”로 공개하고 Google Sheets API가 활성화되어 있어야 합니다.
+            · 결과보고서 메뉴에서 폴더·시트를 이미 저장했다면 자동으로 연동됩니다. (구글 API 키·폴더·시트 모두 공용)<br />
+            · 경남본부(상위) 폴더 링크를 붙여넣으면 하위 선로 폴더가 자동으로 목록에 표시됩니다.<br />
+            · 드라이브 폴더와 시트를 “링크가 있는 모든 사용자 · 뷰어”로 공개해야 합니다.
           </p>
         </div>
       </details>
 
       {err && <div className="panel no-print" style={{ marginBottom: 16, padding: "12px 18px", color: "#b3261e", fontSize: 13, borderColor: "rgba(179,38,30,.3)" }}>⚠ {err}</div>}
-      {loading && <div className="panel no-print" style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>공가조사표 불러오는 중…</div>}
+      {loadingLines && <div className="panel no-print" style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>선로 목록 불러오는 중…</div>}
 
-      {!loading && surveys.length === 0 && !err && (
+      {!loadingLines && lines.length === 0 && !err && (
         <div className="panel no-print" style={{ padding: "60px 20px", textAlign: "center", color: "var(--muted)" }}>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>표시할 공가조사표가 없습니다</div>
-          <div style={{ fontSize: 13 }}>위 ⚙ 설정에서 점검 데이터 구글시트 링크를 입력하고 “공가조사표 불러오기”를 누르세요.</div>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>폴더를 먼저 설정하세요</div>
+          <div style={{ fontSize: 13 }}>위 ⚙ 폴더 설정에서 드라이브 폴더 링크를 입력하고 “선로 목록 불러오기”를 누르세요.</div>
         </div>
       )}
 
-      {surveys.length > 0 && (
+      {lines.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16 }}>
           <div className="panel no-print" style={{ alignSelf: "start", maxHeight: "80vh", overflowY: "auto" }}>
-            {branches.length > 1 && (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, padding: "10px 10px 4px" }}>
-                {["전체", ...branches].map((b) => (
-                  <button key={b} type="button" onClick={() => selectBranch(b)}
-                    style={{ padding: "4px 11px", border: "1px solid var(--line-2)", borderRadius: 20, fontSize: 12, cursor: "pointer", background: branch === b ? "var(--ink)" : "transparent", color: branch === b ? "var(--paper)" : "inherit", fontWeight: branch === b ? 700 : 400 }}>
-                    {b}
-                  </button>
-                ))}
-              </div>
-            )}
             <div className="panel-body" style={{ borderBottom: "1px solid var(--line-2)", fontWeight: 700, fontSize: 13, position: "sticky", top: 0, background: "var(--paper)" }}>
-              선로 {shown.length}개 · 데이터 {withData}개
+              선로 {lines.length}개
             </div>
             <div style={{ padding: 8 }}>
-              {shown.map((s) => {
-                const on = selected?.key === s.key && mode === "single";
-                const has = s.tel.length || s.self.length;
+              {lines.map((l) => {
+                const on = selected?.id === l.id && mode === "single";
+                const sv = surveyOf(l);
+                const has = sv.tel.length || sv.self.length;
                 return (
-                  <button key={s.key} type="button" onClick={() => { setMode("single"); setSelected(s); }}
+                  <button key={l.id} type="button" onClick={() => { setMode("single"); setSelected(l); }}
                     style={{ display: "flex", justifyContent: "space-between", width: "100%", textAlign: "left", padding: "9px 12px", borderRadius: 6, border: "1px solid " + (on ? "var(--ink)" : "transparent"), background: on ? "var(--ink)" : "transparent", color: on ? "var(--paper)" : "inherit", cursor: "pointer", fontSize: 13, marginBottom: 2 }}>
-                    <span>{s.line} {s.seq}</span>
-                    <span style={{ fontSize: 11, opacity: .7 }}>{has ? `통${s.tel.length}·자${s.self.length}` : "—"}</span>
+                    <span>{l.name}</span>
+                    <span style={{ fontSize: 11, opacity: .7 }}>{has ? `통${sv.tel.length}·자${sv.self.length}` : "—"}</span>
                   </button>
                 );
               })}
@@ -430,15 +481,15 @@ export default function GonggaSurveyDashboard() {
           </div>
 
           <div>
-            {mode === "single" && selected && (
-              <div className="sd-print"><SurveySheet sv={selected} sketch={sketches[sketchKey(selected)] ?? ""} onSketch={(d) => saveSketch(selected, d)} editable ov={surveyOv[cellKey(selected)]} onCell={(id, v) => saveCell(selected, id, v)} /></div>
+            {mode === "single" && selectedSv && (
+              <div className="sd-print"><SurveySheet sv={selectedSv} sketch={sketches[sketchKey(selectedSv)] ?? ""} onSketch={(d) => saveSketch(selectedSv, d)} editable ov={surveyOv[cellKey(selectedSv)]} onCell={(id, v) => saveCell(selectedSv, id, v)} /></div>
             )}
             {mode === "single" && !selected && (
               <div className="panel no-print" style={{ padding: "60px 20px", textAlign: "center", color: "var(--muted)", fontSize: 13 }}>좌측에서 선로를 선택하세요.</div>
             )}
             {mode === "all" && (
               <div className="sd-print">
-                {shown.map((s) => <Fragment key={s.key}><SurveySheet sv={s} sketch={sketches[sketchKey(s)] ?? ""} ov={surveyOv[cellKey(s)]} /></Fragment>)}
+                {lines.map((l) => { const sv = surveyOf(l); return <Fragment key={l.id}><SurveySheet sv={sv} sketch={sketches[sketchKey(sv)] ?? ""} ov={surveyOv[cellKey(sv)]} /></Fragment>; })}
               </div>
             )}
           </div>
