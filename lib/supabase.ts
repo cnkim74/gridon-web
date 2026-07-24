@@ -22,5 +22,10 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    // 탭 간 인증 Web Lock 비활성화. 기본 navigatorLock은 다른 탭/복원된 세션이
+    // 잠금을 물고 놓지 않으면 signInWithPassword 등이 요청도 못 보내고 무한 대기하는
+    // 데드락을 유발한다(로그인 버튼이 아무 반응 없음). 클라이언트 전용 정적 SPA라
+    // 탭 간 잠금이 필요 없으므로 통과형 lock으로 대체한다.
+    lock: async (_name, _acquireTimeout, fn) => fn(),
   },
 });
