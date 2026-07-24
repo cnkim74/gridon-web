@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, Fragment } from "react";
 import { supabase } from "@/lib/supabase";
+import { downloadXlsx } from "@/lib/exportXlsx";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sba = supabase as any;
@@ -939,6 +940,37 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
     if (doc !== "sajin" && apiKey.trim() && sheetUrl.trim()) loadSheet(apiKey, sheetUrl);
   };
 
+  // 데이터(값) 엑셀 저장 — 선로별 한 줄
+  function exportExcel() {
+    const stamp = new Date().toISOString().slice(0, 10);
+    if (doc === "gongga") {
+      const aoa: (string | number)[][] = [["선로명", "전산화번호", "설비종류"]];
+      for (const l of lines) aoa.push([l.name, digitalOf(l.name), overrides[l.name]?.equip_type ?? ""]);
+      downloadXlsx(`지중설비별_공가조사표_${stamp}.xlsx`, [{ name: "선로목록", aoa }]);
+      return;
+    }
+    // 결과보고서
+    const aoa: (string | number)[][] = [[
+      "선로명", "선로번호", "전산화번호", "본부", "사업소", "설치위치", "정기점검일",
+      "침수높이(cm)", "맨홀단차(mm)", "종합판정", "접속재수량", "D/L 접속재온도", "특이사항",
+    ]];
+    for (const l of lines) {
+      const sr = sheetMap[normLine(l.name)] ?? {};
+      const or = overrides[l.name]?.report ?? {};
+      const pick = (f: keyof ReportOverride): string => (or[f] as string) ?? (sr[f] as string) ?? "";
+      const d = splitLine(l.name);
+      const names = or.dlNames ?? sr.dlNames ?? [];
+      const temps = or.temps ?? sr.temps ?? [];
+      const tempStr = temps.map((t, i) => `${names[i] || "D/L" + (i + 1)} A${t.a || ""}/B${t.b || ""}/C${t.c || ""}`).join(" · ");
+      aoa.push([
+        pick("lineTitle") || d.title, pick("seq") || d.seq, digitalOf(l.name),
+        rd.bonbu, rd.saeopso, pick("installPos") || rd.installPos, pick("inspectDate") || rd.inspectDate,
+        pick("floodHeight"), pick("step"), pick("overall") || rd.overall, pick("jointCount"), tempStr, pick("special"),
+      ]);
+    }
+    downloadXlsx(`맨홀점검_결과보고서_${stamp}.xlsx`, [{ name: "맨홀목록", aoa }]);
+  }
+
   // 구글시트(점검 데이터 원본) 로드 → 맨홀별 자동채움 맵
   async function loadSheet(key: string, sheetInput: string) {
     const id = extractSheetId(sheetInput);
@@ -1037,6 +1069,9 @@ export default function PhotoReportDashboard({ doc }: { doc: "gongga" | "sajin" 
             </button>
             {mode === "single" && selected && (
               <button className="btn btn--ghost btn--sm" type="button" onClick={() => openLine(selected)}>새로고침</button>
+            )}
+            {doc !== "sajin" && (
+              <button className="btn btn--ghost btn--sm" type="button" onClick={exportExcel}>⬇ 엑셀 저장</button>
             )}
             <button className="btn btn--sm" type="button" onClick={() => doPrint(doc)} disabled={loadingPhotos || loadingAll || preparing || !canPrint}>{preparing ? "이미지 준비 중…" : "🖨 인쇄 · PDF 저장"}</button>
           </div>

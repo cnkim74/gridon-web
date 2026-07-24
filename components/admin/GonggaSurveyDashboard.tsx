@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useRef, Fragment } from "react";
 import { supabase } from "@/lib/supabase";
+import { downloadXlsx } from "@/lib/exportXlsx";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sba = supabase as any;
@@ -402,6 +403,30 @@ export default function GonggaSurveyDashboard() {
     window.print();
   }
 
+  // 데이터(값) 엑셀 저장 — 선로요약 + 통신설비내역 + 자기설비내역
+  function exportExcel() {
+    const summary: (string | number)[][] = [["선로명", "선로번호", "사업소명", "전산화번호", "비고", "회선수", "통신설비 행수", "자기설비 행수"]];
+    const tel: (string | number)[][] = [["사업소명", "전산화번호", "선로명", "선로번호", "비고", "회선수", ...TEL_COLS]];
+    const self: (string | number)[][] = [["사업소명", "전산화번호", "선로명", "선로번호", ...SELF_COLS]];
+    for (const l of lines) {
+      const sv = surveyOf(l);
+      const ov = surveyOv[cellKey(sv)] ?? {};
+      const g = (id: string, fb: string) => ov[id] ?? fb ?? "";
+      const sa = g("sa", sv.sa), dig = g("dig", sv.dig), line = g("line", sv.line), seq = g("seq", sv.seq), bigo = g("bigo", sv.bigo), hoe = g("hoe", sv.hoe);
+      summary.push([line, seq, sa, dig, bigo, hoe, sv.tel.length, sv.self.length]);
+      if (sv.tel.length === 0) tel.push([sa, dig, line, seq, bigo, hoe, ...TEL_COLS.map(() => "")]);
+      else sv.tel.forEach((row, i) => tel.push([sa, dig, line, seq, bigo, hoe, ...TEL_COLS.map((_, j) => g(`t${i}_${j}`, row[j] ?? ""))]));
+      if (sv.self.length === 0) self.push([sa, dig, line, seq, ...SELF_COLS.map(() => "")]);
+      else sv.self.forEach((row, i) => self.push([sa, dig, line, seq, ...SELF_COLS.map((_, j) => g(`s${i}_${j}`, row[j] ?? ""))]));
+    }
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadXlsx(`공가조사표_통신설비_${stamp}.xlsx`, [
+      { name: "선로요약", aoa: summary },
+      { name: "통신설비내역", aoa: tel },
+      { name: "자기설비내역", aoa: self },
+    ]);
+  }
+
   // 설정 저장 (결과보고서와 동일: 폴더·시트 링크 저장, API 키는 공용이라 건드리지 않음)
   const saveSettings = async () => {
     const { error }: SbaRes = await sba.from("app_settings").upsert([
@@ -424,6 +449,7 @@ export default function GonggaSurveyDashboard() {
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn--ghost btn--sm" type="button" onClick={() => { setMode("all"); setSelected(null); }}>전체 {lines.length}개 인쇄</button>
             <button className="btn btn--ghost btn--sm" type="button" onClick={() => loadLinesWith(apiKey, folder)} disabled={loadingLines}>새로고침</button>
+            <button className="btn btn--ghost btn--sm" type="button" onClick={exportExcel} disabled={lines.length === 0}>⬇ 엑셀 저장</button>
             <button className="btn btn--sm" type="button" onClick={doPrint} disabled={mode === "single" ? !selected : lines.length === 0}>🖨 인쇄 · PDF 저장</button>
           </div>
         )}
